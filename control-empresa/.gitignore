@@ -1,0 +1,18 @@
+# Nunca commits credenciales reales
+.env
+.env.*
+!.env.example
+*.env.local
+
+# Obsidian local config (puede contener metadata sensible o usuario-específica)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Backups locales
+*.bak
+*~
