@@ -1,0 +1,13 @@
+{
+  "promptDelete": true,
+  "alwaysUpdateLinks": true,
+  "newLinkFormat": "relative",
+  "useMarkdownLinks": false,
+  "attachmentFolderPath": "10-RECURSOS/_attachments",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "00-INBOX",
+  "showLineNumber": true,
+  "readableLineLength": true,
+  "spellcheck": false,
+  "livePreview": true
+}
