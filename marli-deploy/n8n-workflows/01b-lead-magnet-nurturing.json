@@ -1,0 +1,187 @@
+{
+  "name": "Marli — Lead Magnet · Nurturing diario (cron)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours", "hoursInterval": 24, "triggerAtHour": 9, "triggerAtMinute": 0 }
+          ]
+        }
+      },
+      "id": "cron-daily",
+      "name": "Cron · Diario 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "={{ $env.NOTION_DB_LEADS_ID }}",
+        "returnAll": true,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "capturado"
+            },
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "nurturing"
+            }
+          ]
+        }
+      },
+      "id": "notion-query",
+      "name": "Notion · Query leads activos",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Para cada lead, calcular qué email del nurturing toca enviar hoy.\n// Sequence: T+0 entrega (ya enviado en captura), T+1, T+3, T+5, T+7, T+10, T+14.\n// Tras T+14 sin acción → status='no-response'.\n\nconst SEQUENCE = [\n  { day: 1,  template: 'edu_01_que_es_marli',     subject: 'Cómo recuperar 8 horas a la semana sin contratar a nadie' },\n  { day: 3,  template: 'story_02_caso_lucia',     subject: 'Lucía atendía 22 pacientes con 9 horas/sem de admin. Mira lo que hizo.' },\n  { day: 5,  template: 'caso_03_clinica_madrid',  subject: 'Una clínica con 5 psicólogos, todos en el mismo sistema' },\n  { day: 7,  template: 'eco_04_math_498',         subject: 'Las cuentas: 498€ vs 1.500€ al año. Mira el desglose' },\n  { day: 10, template: 'cta_05_video_demo',       subject: '¿25 minutos para ver si Marli encaja en tu consulta?' },\n  { day: 14, template: 'cta_06_escasez_oferta',   subject: 'Última semana del precio actual (después sube)' }\n];\n\nconst now = new Date();\nconst out = [];\n\nfor (const lead of $input.all()) {\n  const props = lead.json.properties || {};\n  const captura = props['Fecha Captura']?.date?.start;\n  if (!captura) continue;\n  \n  const daysSince = Math.floor((now - new Date(captura)) / (1000 * 60 * 60 * 24));\n  \n  // Detectar qué email del sequence toca (si hay alguno hoy exacto).\n  const slot = SEQUENCE.find(s => s.day === daysSince);\n  if (!slot) {\n    // Si pasó T+14 y status sigue 'capturado'/'nurturing' → marcar no-response.\n    if (daysSince > 14) {\n      out.push({\n        action: 'mark_no_response',\n        page_id: lead.json.id,\n        email: props.Email?.title?.[0]?.plain_text\n      });\n    }\n    continue;\n  }\n  \n  out.push({\n    action: 'send_email',\n    page_id: lead.json.id,\n    email: props.Email?.title?.[0]?.plain_text,\n    nombre: props.Nombre?.rich_text?.[0]?.plain_text || '',\n    template: slot.template,\n    subject: slot.subject,\n    day: slot.day\n  });\n}\n\nreturn out.map(item => ({ json: item }));"
+      },
+      "id": "compute-actions",
+      "name": "Calcular qué enviar a cada lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-send",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "send_email",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-send",
+      "name": "IF · ¿Enviar email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"{{ $json.subject }}\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<!-- TODO: cargar HTML real desde S3/CDN según template={{ $json.template }} -->\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Cloudflare Email · Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 220]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.page_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Status|select", "selectValue": "nurturing" },
+            { "key": "Fecha Ultima Accion|date", "date": "={{ new Date().toISOString().split('T')[0] }}" }
+          ]
+        }
+      },
+      "id": "notion-update-nurturing",
+      "name": "Notion · Update status nurturing",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1340, 220],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.page_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Status|select", "selectValue": "no-response" },
+            { "key": "Fecha Ultima Accion|date", "date": "={{ new Date().toISOString().split('T')[0] }}" }
+          ]
+        }
+      },
+      "id": "notion-mark-noresponse",
+      "name": "Notion · Marcar no-response",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1120, 400],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    }
+  ],
+  "connections": {
+    "Cron · Diario 9:00": {
+      "main": [[{ "node": "Notion · Query leads activos", "type": "main", "index": 0 }]]
+    },
+    "Notion · Query leads activos": {
+      "main": [[{ "node": "Calcular qué enviar a cada lead", "type": "main", "index": 0 }]]
+    },
+    "Calcular qué enviar a cada lead": {
+      "main": [[{ "node": "IF · ¿Enviar email?", "type": "main", "index": 0 }]]
+    },
+    "IF · ¿Enviar email?": {
+      "main": [
+        [{ "node": "Cloudflare Email · Send", "type": "main", "index": 0 }],
+        [{ "node": "Notion · Marcar no-response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Cloudflare Email · Send": {
+      "main": [[{ "node": "Notion · Update status nurturing", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "marli" },
+    { "name": "lead-magnet" },
+    { "name": "nurturing" },
+    { "name": "fase-1" }
+  ],
+  "_meta": {
+    "marli_workflow_id": "01b-lead-magnet-nurturing",
+    "trigger": "Cron diario 9:00 CET",
+    "depends_on": ["NOTION_DB_LEADS_ID", "CLOUDFLARE_EMAIL_API_KEY", "templates HTML emails (TBD: S3/CDN)"],
+    "fase": 1,
+    "criticidad": "S2",
+    "todo_pendiente": "Reemplazar el placeholder HTML del email por carga real de templates desde S3/CDN. Por ahora hay 6 templates a producir: edu_01, story_02, caso_03, eco_04, cta_05, cta_06."
+  }
+}

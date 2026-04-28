@@ -1,0 +1,147 @@
+{
+  "name": "Marli — Informes Automáticos (Notion → Claude → DOCX → PDF)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 15 }
+          ]
+        }
+      },
+      "id": "cron-poll",
+      "name": "Cron · Cada 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "_doc": "Para producción real con suscripción Notion Enterprise se usa webhook nativo. Polling cada 15min es OK para volumen pequeño-mediano."
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "={{ $env.NOTION_DB_SESIONES_ID }}",
+        "returnAll": true,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            { "key": "Status|select", "condition": "equals", "selectValue": "cerrada" }
+          ]
+        }
+      },
+      "id": "find-cerradas",
+      "name": "Notion · Sesiones cerradas",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": { "notionApi": { "id": "notion-cliente", "name": "Notion Cliente Psicólogo" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Para cada sesión cerrada, extraer payload para Claude.\nconst out = [];\nfor (const row of $input.all()) {\n  const props = row.json.properties || {};\n  out.push({\n    page_id: row.json.id,\n    sesion_id: props['ID Sesion']?.title?.[0]?.plain_text || row.json.id,\n    fecha_sesion: props['Fecha Sesion']?.date?.start,\n    tipo_sesion: props['Tipo Sesion']?.select?.name || 'seguimiento',\n    plantilla: props['Plantilla Informe']?.select?.name || 'seguimiento',\n    duracion_min: props['Duracion Min']?.number || 50,\n    notas_sesion: props['Notas Sesion']?.rich_text?.map(r => r.plain_text).join('') || '',\n    objetivos: props['Objetivos Trabajados']?.rich_text?.map(r => r.plain_text).join('') || '',\n    tareas: props['Tareas Asignadas']?.rich_text?.map(r => r.plain_text).join('') || '',\n    paciente_relation_id: props.Paciente?.relation?.[0]?.id || null\n  });\n}\nreturn out.map(item => ({ json: item }));"
+      },
+      "id": "extract-sesion-data",
+      "name": "Extraer datos sesión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY_INFORMES }}" },
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-opus-4-7\",\n  \"max_tokens\": 2048,\n  \"system\": [\n    { \"type\": \"text\", \"text\": \"Eres un asistente que redacta informes clínicos de psicología. Sigues estructura profesional, neutralidad clínica, NO inventas información, mantienes tono empático pero técnico, y JAMÁS incluyes diagnóstico definitivo (solo orientativo si el psicólogo lo menciona). Tu output será revisado y aprobado por el psicólogo antes de publicarse — eres ayuda, no autoridad.\", \"cache_control\": { \"type\": \"ephemeral\" } }\n  ],\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Plantilla: {{ $json.plantilla }}\\nTipo sesión: {{ $json.tipo_sesion }}\\nDuración: {{ $json.duracion_min }} min\\nFecha: {{ $json.fecha_sesion }}\\n\\nNotas del psicólogo:\\n{{ $json.notas_sesion }}\\n\\nObjetivos trabajados:\\n{{ $json.objetivos }}\\n\\nTareas asignadas:\\n{{ $json.tareas }}\\n\\nGenera el informe en JSON con campos: motivo, contenido_sesion, evolucion, plan_terapeutico, observaciones. Cada campo entre 2-4 frases. Sin markdown, solo texto plano dentro del JSON.\" }\n  ]\n}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "claude-redact",
+      "name": "Claude · Redactar borrador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear respuesta Claude y preparar payload para update Notion\nconst response = $input.item.json;\nconst content = response.content?.[0]?.text || '{}';\n\nlet informe;\ntry {\n  // Claude a veces envuelve en ```json ... ```\n  const cleaned = content.replace(/^```json\\n?/, '').replace(/\\n?```$/, '').trim();\n  informe = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error(`Output Claude no parseable: ${content.substring(0, 200)}`);\n}\n\nconst sesionData = $('Extraer datos sesión').item.json;\n\nconst resumenTexto = [\n  `**Motivo**: ${informe.motivo || ''}`,\n  ``,\n  `**Contenido de la sesión**: ${informe.contenido_sesion || ''}`,\n  ``,\n  `**Evolución**: ${informe.evolucion || ''}`,\n  ``,\n  `**Plan terapéutico**: ${informe.plan_terapeutico || ''}`,\n  ``,\n  `**Observaciones**: ${informe.observaciones || ''}`,\n  ``,\n  `_Generado por IA — pendiente de revisión y aprobación por el profesional._`\n].join('\\n');\n\nreturn {\n  page_id: sesionData.page_id,\n  resumen_ia: resumenTexto,\n  raw_informe: informe\n};"
+      },
+      "id": "parse-claude",
+      "name": "Parsear borrador",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.page_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Resumen IA|rich_text", "textContent": "={{ $json.resumen_ia }}" },
+            { "key": "Status|select", "selectValue": "informe-enviado" }
+          ]
+        }
+      },
+      "id": "notion-write-resumen",
+      "name": "Notion · Escribir Resumen IA",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "credentials": { "notionApi": { "id": "notion-cliente", "name": "Notion Cliente Psicólogo" } },
+      "_doc": "Cambia status a 'informe-enviado' (revisar) — espera aprobación manual del psicólogo (toggle 'Informe Aprobado'). Otro workflow detectará ese toggle y generará el .docx + .pdf."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $env.CLIENTE_PSICOLOGO_EMAIL }}\" }] }],\n  \"from\": { \"email\": \"informes@marli.agency\", \"name\": \"Marli\" },\n  \"subject\": \"Borrador de informe listo para revisar\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hay un borrador de informe esperando tu revisión en el CRM. Cuando lo hayas leído y editado si hace falta, marca el toggle <strong>Informe Aprobado</strong> y se generará el PDF automáticamente.</p>\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "notify-psicologo",
+      "name": "Email · Avisar psicólogo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Cron · Cada 15 min": { "main": [[{ "node": "Notion · Sesiones cerradas", "type": "main", "index": 0 }]] },
+    "Notion · Sesiones cerradas": { "main": [[{ "node": "Extraer datos sesión", "type": "main", "index": 0 }]] },
+    "Extraer datos sesión": { "main": [[{ "node": "Claude · Redactar borrador", "type": "main", "index": 0 }]] },
+    "Claude · Redactar borrador": { "main": [[{ "node": "Parsear borrador", "type": "main", "index": 0 }]] },
+    "Parsear borrador": { "main": [[{ "node": "Notion · Escribir Resumen IA", "type": "main", "index": 0 }]] },
+    "Notion · Escribir Resumen IA": { "main": [[{ "node": "Email · Avisar psicólogo", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": [{ "name": "marli" }, { "name": "informes" }, { "name": "claude" }, { "name": "fase-1" }],
+  "_meta": {
+    "marli_workflow_id": "04-informes-auto",
+    "trigger": "Cron 15min · poll DB Sesiones por status='cerrada'",
+    "depends_on": ["NOTION_DB_SESIONES_ID", "ANTHROPIC_API_KEY_INFORMES (key separada de chatbot para rate-limits independientes)", "CLIENTE_PSICOLOGO_EMAIL", "CLOUDFLARE_EMAIL_API_KEY"],
+    "fase": 1,
+    "criticidad": "S2",
+    "compliance_critical": "El borrador IA NUNCA se envía al paciente directamente. SIEMPRE pasa por aprobación del psicólogo (toggle 'Informe Aprobado').",
+    "next_workflow": "04b-informes-export-pdf.json (se dispara cuando 'Informe Aprobado'=true → genera .docx con plantilla → convierte a .pdf → adjunta en Notion)",
+    "prompt_caching": "system prompt marcado con cache_control:ephemeral → ahorro 90% tokens en runs sucesivos (mismo system, distinto user)"
+  }
+}

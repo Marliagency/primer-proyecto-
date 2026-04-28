@@ -1,0 +1,142 @@
+{
+  "_meta": {
+    "name": "CRM Cliente — Pacientes",
+    "description": "BD de pacientes del psicólogo cliente. Forma parte del PRODUCTO CRM Marli que se entrega. NO es operativa de Marli. Cada cliente la instala en su propio Notion. RGPD: solo datos organizativos, NO clínicos.",
+    "owner_internal": "cliente-psicologo (NO marli)",
+    "rgpd_data_class": "personal — nombre, email, telefono. NO clinico.",
+    "rgpd_critical_note": "PROHIBIDO almacenar diagnostico, notas clinicas, medicacion, contenido sesion. El historial clinico vive en sistema separado del psicologo.",
+    "retention_policy_days": "Definida por el psicologo segun su criterio profesional",
+    "is_product_template": true
+  },
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "CRM Cliente — Pacientes"
+      }
+    }
+  ],
+  "icon": {
+    "type": "emoji",
+    "emoji": "👥"
+  },
+  "properties": {
+    "Nombre Completo": {
+      "title": {}
+    },
+    "Email": {
+      "email": {}
+    },
+    "Telefono": {
+      "phone_number": {}
+    },
+    "Estado": {
+      "select": {
+        "options": [
+          { "name": "activo",        "color": "green"  },
+          { "name": "alta",          "color": "blue"   },
+          { "name": "pausa",         "color": "yellow" },
+          { "name": "derivado",      "color": "purple" },
+          { "name": "no-volvera",    "color": "gray"   }
+        ]
+      }
+    },
+    "Fecha Primera Sesion": {
+      "date": {}
+    },
+    "Fecha Ultima Sesion": {
+      "date": {}
+    },
+    "Fecha Proxima Sesion": {
+      "date": {}
+    },
+    "Frecuencia": {
+      "select": {
+        "options": [
+          { "name": "semanal",       "color": "green"  },
+          { "name": "quincenal",     "color": "blue"   },
+          { "name": "mensual",       "color": "purple" },
+          { "name": "puntual",       "color": "gray"   }
+        ]
+      }
+    },
+    "Modalidad": {
+      "select": {
+        "options": [
+          { "name": "presencial",    "color": "blue"   },
+          { "name": "online",        "color": "purple" },
+          { "name": "mixta",         "color": "green"  }
+        ]
+      }
+    },
+    "Motivo Consulta General": {
+      "rich_text": {
+        "_doc": "SOLO categoría general (ansiedad, pareja, duelo). NO incluir detalles clínicos ni diagnóstico aquí."
+      }
+    },
+    "Tipo Pago": {
+      "select": {
+        "options": [
+          { "name": "privado",       "color": "green"  },
+          { "name": "mutua",         "color": "blue"   },
+          { "name": "subvencionado", "color": "yellow" }
+        ]
+      }
+    },
+    "Mutua": {
+      "rich_text": {}
+    },
+    "Tarifa Sesion": {
+      "number": {
+        "format": "euro"
+      }
+    },
+    "Total Sesiones Acumuladas": {
+      "number": {
+        "format": "number"
+      }
+    },
+    "Importe Total Acumulado": {
+      "number": {
+        "format": "euro"
+      }
+    },
+    "Fuente Captacion": {
+      "select": {
+        "options": [
+          { "name": "boca-oreja",      "color": "green"  },
+          { "name": "google",          "color": "blue"   },
+          { "name": "redes-sociales",  "color": "purple" },
+          { "name": "derivacion",      "color": "yellow" },
+          { "name": "directorio",      "color": "orange" },
+          { "name": "otro",            "color": "default"}
+        ]
+      }
+    },
+    "Necesita Recordatorio": {
+      "checkbox": {}
+    },
+    "Tags": {
+      "multi_select": {
+        "options": [
+          { "name": "menor",            "color": "blue"   },
+          { "name": "pareja",           "color": "purple" },
+          { "name": "familiar",         "color": "green"  },
+          { "name": "deuda",            "color": "red"    },
+          { "name": "VIP",              "color": "yellow" }
+        ]
+      }
+    },
+    "Notas Organizativas": {
+      "rich_text": {
+        "_doc": "Solo aspectos logisticos: prefiere mañanas, no responde whatsapp, etc. NO contenido clinico."
+      }
+    },
+    "Created": {
+      "created_time": {}
+    },
+    "Updated": {
+      "last_edited_time": {}
+    }
+  }
+}

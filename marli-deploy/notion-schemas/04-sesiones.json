@@ -1,0 +1,138 @@
+{
+  "_meta": {
+    "name": "CRM Cliente — Sesiones",
+    "description": "Registro de sesiones realizadas con cada paciente. Trigger principal del workflow de auto-informes: cuando una sesion pasa a status='cerrada', n8n recoge los datos y genera informe automatico.",
+    "owner_internal": "cliente-psicologo",
+    "rgpd_data_class": "personal + clinico (resumen + objetivos)",
+    "rgpd_critical_note": "El campo 'Resumen IA' es generado y debe ser revisado/aprobado por el psicologo antes de cualquier exportacion. Custodia: psicologo.",
+    "indexed_for_workflows": ["auto-informes", "recordatorios"],
+    "is_product_template": true
+  },
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "CRM Cliente — Sesiones"
+      }
+    }
+  ],
+  "icon": {
+    "type": "emoji",
+    "emoji": "📝"
+  },
+  "properties": {
+    "ID Sesion": {
+      "title": {}
+    },
+    "Paciente": {
+      "relation": {
+        "_doc": "Apuntar a la DB Pacientes (database_id se setea en el bootstrap script)",
+        "database_id": "PACIENTES_DB_ID_PLACEHOLDER",
+        "single_property": {}
+      }
+    },
+    "Fecha Sesion": {
+      "date": {}
+    },
+    "Duracion Min": {
+      "number": {
+        "format": "number"
+      }
+    },
+    "Modalidad": {
+      "select": {
+        "options": [
+          { "name": "presencial",    "color": "blue"   },
+          { "name": "online",        "color": "purple" }
+        ]
+      }
+    },
+    "Status": {
+      "select": {
+        "options": [
+          { "name": "agendada",          "color": "yellow" },
+          { "name": "realizada",         "color": "blue"   },
+          { "name": "cerrada",           "color": "green",  "_doc": "Trigger del workflow auto-informes" },
+          { "name": "informe-enviado",   "color": "purple" },
+          { "name": "no-presentado",     "color": "gray"   },
+          { "name": "cancelada-cliente", "color": "orange" },
+          { "name": "cancelada-prof",    "color": "red"    }
+        ]
+      }
+    },
+    "Tipo Sesion": {
+      "select": {
+        "options": [
+          { "name": "primera-consulta",   "color": "purple" },
+          { "name": "seguimiento",        "color": "blue"   },
+          { "name": "evaluacion",         "color": "yellow" },
+          { "name": "alta",               "color": "green"  },
+          { "name": "pericial",           "color": "orange" },
+          { "name": "derivacion",         "color": "gray"   }
+        ]
+      }
+    },
+    "Notas Sesion": {
+      "rich_text": {
+        "_doc": "Notas que toma el psicologo durante/despues de la sesion. Input principal del informe IA."
+      }
+    },
+    "Objetivos Trabajados": {
+      "rich_text": {}
+    },
+    "Tareas Asignadas": {
+      "rich_text": {}
+    },
+    "Resumen IA": {
+      "rich_text": {
+        "_doc": "Generado por workflow auto-informes (Claude). Editable por psicologo antes de aprobar."
+      }
+    },
+    "Informe Aprobado": {
+      "checkbox": {
+        "_doc": "Cuando el psicologo lo marca, el workflow genera el .docx + .pdf y los adjunta."
+      }
+    },
+    "Plantilla Informe": {
+      "select": {
+        "options": [
+          { "name": "primera-consulta",   "color": "purple" },
+          { "name": "seguimiento",        "color": "blue"   },
+          { "name": "alta",               "color": "green"  },
+          { "name": "pericial",           "color": "orange" },
+          { "name": "derivacion",         "color": "yellow" }
+        ]
+      }
+    },
+    "Informe DOCX": {
+      "files": {
+        "_doc": "Generado automaticamente. URL S3 o file upload."
+      }
+    },
+    "Informe PDF": {
+      "files": {}
+    },
+    "Cobrada": {
+      "checkbox": {}
+    },
+    "Importe": {
+      "number": {
+        "format": "euro"
+      }
+    },
+    "Recordatorio Enviado": {
+      "checkbox": {
+        "_doc": "Set por workflow recordatorios (cron 18h, ventana 24h)."
+      }
+    },
+    "Recordatorio Confirmado": {
+      "checkbox": {}
+    },
+    "Created": {
+      "created_time": {}
+    },
+    "Updated": {
+      "last_edited_time": {}
+    }
+  }
+}

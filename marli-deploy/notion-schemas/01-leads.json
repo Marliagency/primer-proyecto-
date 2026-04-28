@@ -1,0 +1,131 @@
+{
+  "_meta": {
+    "name": "Marli — Leads",
+    "description": "Pipeline de leads de Marli Agency. Cada fila = una persona que ha entrado en el funnel (lead magnet, outreach, ads). Status drives los workflows de nurturing y sales.",
+    "owner_internal": "marli",
+    "rgpd_data_class": "personal — email, nombre, source",
+    "retention_policy_days": 730,
+    "indexed_for_workflows": ["lead-magnet", "cobro", "onboarding"]
+  },
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "Marli — Leads"
+      }
+    }
+  ],
+  "icon": {
+    "type": "emoji",
+    "emoji": "🎯"
+  },
+  "properties": {
+    "Email": {
+      "title": {}
+    },
+    "Nombre": {
+      "rich_text": {}
+    },
+    "Status": {
+      "select": {
+        "options": [
+          { "name": "capturado",                "color": "gray"   },
+          { "name": "nurturing",                "color": "blue"   },
+          { "name": "llamada-agendada",         "color": "purple" },
+          { "name": "en-llamada",               "color": "yellow" },
+          { "name": "propuesta-enviada",        "color": "orange" },
+          { "name": "cerrado-pendiente-pago",   "color": "pink"   },
+          { "name": "cliente",                  "color": "green"  },
+          { "name": "no-response",              "color": "default"},
+          { "name": "descartado",               "color": "red"    }
+        ]
+      }
+    },
+    "Persona": {
+      "select": {
+        "options": [
+          { "name": "saturada",      "color": "blue"   },
+          { "name": "emprendedor",   "color": "purple" },
+          { "name": "clinica",       "color": "green"  },
+          { "name": "desconocido",   "color": "gray"   }
+        ]
+      }
+    },
+    "Fuente": {
+      "select": {
+        "options": [
+          { "name": "lead-magnet-ig",     "color": "pink"    },
+          { "name": "lead-magnet-li",     "color": "blue"    },
+          { "name": "outreach-linkedin",  "color": "purple"  },
+          { "name": "ads-meta",           "color": "orange"  },
+          { "name": "ads-linkedin",       "color": "yellow"  },
+          { "name": "blog-seo",           "color": "green"   },
+          { "name": "referido",           "color": "brown"   },
+          { "name": "directo",            "color": "gray"    }
+        ]
+      }
+    },
+    "UTM Campaign": {
+      "rich_text": {}
+    },
+    "UTM Source": {
+      "rich_text": {}
+    },
+    "Telefono": {
+      "phone_number": {}
+    },
+    "Fecha Captura": {
+      "date": {}
+    },
+    "Fecha Ultima Accion": {
+      "date": {}
+    },
+    "Fecha Proxima Accion": {
+      "date": {}
+    },
+    "Pain Point Detectado": {
+      "rich_text": {}
+    },
+    "Producto Interesado": {
+      "multi_select": {
+        "options": [
+          { "name": "CRM",             "color": "blue"   },
+          { "name": "Informes",        "color": "purple" },
+          { "name": "Chatbot Li",      "color": "pink"   },
+          { "name": "Pack Premium",    "color": "green"  },
+          { "name": "Mantenimiento",   "color": "orange" }
+        ]
+      }
+    },
+    "Calendly Link": {
+      "url": {}
+    },
+    "Stripe Customer ID": {
+      "rich_text": {}
+    },
+    "Stripe Checkout Session ID": {
+      "rich_text": {}
+    },
+    "Notas": {
+      "rich_text": {}
+    },
+    "Tags": {
+      "multi_select": {
+        "options": [
+          { "name": "objecion-precio",         "color": "red"    },
+          { "name": "objecion-tecnica",        "color": "orange" },
+          { "name": "objecion-tiempo",         "color": "yellow" },
+          { "name": "ready-to-close",          "color": "green"  },
+          { "name": "necesita-instalacion",    "color": "blue"   },
+          { "name": "alto-potencial-clinica",  "color": "purple" }
+        ]
+      }
+    },
+    "Created": {
+      "created_time": {}
+    },
+    "Updated": {
+      "last_edited_time": {}
+    }
+  }
+}

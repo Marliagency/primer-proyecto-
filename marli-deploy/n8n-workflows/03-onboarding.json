@@ -1,0 +1,125 @@
+{
+  "name": "Marli — Onboarding (post-pago)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marli-onboarding",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-onboarding",
+      "name": "Webhook · Trigger onboarding",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "marli-onboarding"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Esperamos: { email, nombre, producto, con_instalacion, stripe_customer_id }\nconst body = $input.item.json.body || $input.item.json;\nif (!body.email || !body.producto) throw new Error('email y producto requeridos');\n\nreturn {\n  email: body.email.toLowerCase().trim(),\n  nombre: body.nombre || '',\n  producto: body.producto,\n  con_instalacion: !!body.con_instalacion,\n  stripe_customer_id: body.stripe_customer_id || null,\n  fecha_compra: new Date().toISOString().split('T')[0]\n};"
+      },
+      "id": "validate",
+      "name": "Validar payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"Bienvenido a Marli · accesos + vídeo de instalación\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $json.nombre }},</p><p>Gracias por confiar en Marli. Aquí lo tienes todo para empezar:</p><ul><li><a href='https://marli.agency/onboarding/template-notion'>Plantilla Notion del CRM (duplicar a tu workspace)</a></li><li><a href='https://marli.agency/onboarding/video-instalacion'>Vídeo de instalación paso a paso (~20 min)</a></li>{{ $json.con_instalacion ? '<li><a href=\\\"https://calendly.com/marli/instalacion-asistida\\\">Reservar instalación asistida (1h por Zoom)</a></li>' : '' }}<li><a href='https://marli.agency/onboarding/soporte'>Cómo contactar con soporte</a></li></ul><p>En 7 días te escribo para ver cómo va y resolver cualquier duda. Si necesitas algo antes, responde a este email — lo leo yo.</p><p>Un abrazo,<br/>Diego</p>\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "email-bienvenida",
+      "name": "Email · Bienvenida (T+0)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Email|title",
+              "condition": "equals",
+              "titleValue": "={{ $('Validar payload').item.json.email }}"
+            }
+          ]
+        }
+      },
+      "id": "find-cliente",
+      "name": "Notion · Buscar cliente",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Status|select", "selectValue": "onboarding" },
+            { "key": "Fecha Onboarding Completado|date", "date": "" }
+          ]
+        }
+      },
+      "id": "notion-status-onboarding",
+      "name": "Notion · Status onboarding",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook · Trigger onboarding": {
+      "main": [[{ "node": "Validar payload", "type": "main", "index": 0 }]]
+    },
+    "Validar payload": {
+      "main": [[{ "node": "Email · Bienvenida (T+0)", "type": "main", "index": 0 }]]
+    },
+    "Email · Bienvenida (T+0)": {
+      "main": [[{ "node": "Notion · Buscar cliente", "type": "main", "index": 0 }]]
+    },
+    "Notion · Buscar cliente": {
+      "main": [[{ "node": "Notion · Status onboarding", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": [{ "name": "marli" }, { "name": "onboarding" }, { "name": "fase-1" }],
+  "_meta": {
+    "marli_workflow_id": "03-onboarding",
+    "trigger": "POST /webhook/marli-onboarding (lo dispara el handler de Stripe)",
+    "depends_on": ["NOTION_DB_CLIENTES_ID", "CLOUDFLARE_EMAIL_API_KEY"],
+    "fase": 1,
+    "criticidad": "S2",
+    "todo_pendiente": "Workflow companion 03b-onboarding-checkins.json (cron diario que envía emails D+7, D+30 y solicita testimonio)."
+  }
+}

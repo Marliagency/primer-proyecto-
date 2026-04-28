@@ -1,0 +1,186 @@
+{
+  "name": "Marli — Onboarding · Check-ins D+7 / D+30 (cron)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours", "hoursInterval": 24, "triggerAtHour": 10, "triggerAtMinute": 0 }
+          ]
+        }
+      },
+      "id": "cron-daily",
+      "name": "Cron · Diario 10:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
+        "returnAll": true,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            { "key": "Status|select", "condition": "equals", "selectValue": "onboarding" },
+            { "key": "Status|select", "condition": "equals", "selectValue": "activo" }
+          ]
+        }
+      },
+      "id": "notion-query",
+      "name": "Notion · Query clientes",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "credentials": { "notionApi": { "id": "notion-marli", "name": "Notion Marli" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calcular para cada cliente qué acción toca: D+7 (activación), D+30 (testimonio)\nconst now = new Date();\nconst out = [];\n\nfor (const cliente of $input.all()) {\n  const props = cliente.json.properties || {};\n  const compra = props['Fecha Compra Inicial']?.date?.start;\n  const activacionD7 = props['Activacion D7']?.checkbox;\n  const testimonioSolicitado = props['Testimonio Solicitado']?.checkbox;\n  if (!compra) continue;\n\n  const days = Math.floor((now - new Date(compra)) / (1000 * 60 * 60 * 24));\n\n  if (days === 7 && !activacionD7) {\n    out.push({\n      action: 'checkin_d7',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n  \n  if (days === 30 && !testimonioSolicitado) {\n    out.push({\n      action: 'request_testimonio',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n}\n\nreturn out.map(item => ({ json: item }));"
+      },
+      "id": "compute-checkins",
+      "name": "Calcular check-ins",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.action }}", "rightValue": "checkin_d7", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  { "leftValue": "={{ $json.action }}", "rightValue": "request_testimonio", "operator": { "type": "string", "operation": "equals" } }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "switch-action",
+      "name": "Switch · acción",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"¿Cómo va la primera semana con Marli?\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $json.nombre }},</p><p>Han pasado 7 días desde que montaste Marli. ¿Está funcionando como esperabas?</p><p>Si tienes cualquier duda, responde a este email — soy yo quien lee.</p><p>Si quieres que te eche una mano para sacarle el máximo, <a href='https://calendly.com/marli/checkin-15min'>reserva una llamada de 15 min aquí</a>, sin coste.</p><p>Un abrazo,<br/>Diego</p>\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "email-d7",
+      "name": "Email · Check-in D+7",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $('Calcular check-ins').item.json.page_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Activacion D7|checkbox", "checkboxValue": true }
+          ]
+        }
+      },
+      "id": "mark-d7-done",
+      "name": "Notion · marcar D7 enviado",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1340, 200],
+      "credentials": { "notionApi": { "id": "notion-marli", "name": "Notion Marli" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"Un mes con Marli — ¿me regalas 90 segundos?\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $json.nombre }},</p><p>Un mes con Marli. Si te ha aportado, ¿me ayudas con un testimonio corto?</p><p>3 opciones, la que te resulte más cómoda:</p><ol><li>2 frases por email respondiendo a este (lo más fácil)</li><li>30 segundos de audio por WhatsApp al +34 6XX XXX XXX</li><li>1 minuto de vídeo desde el móvil — <a href='https://marli.agency/grabar-testimonio'>aquí explico cómo</a></li></ol><p>Lo que diga te lo pasaré antes de publicarlo, faltaría más.</p><p>Gracias 💚<br/>Diego</p>\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "email-testimonio",
+      "name": "Email · Pedir testimonio D+30",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $('Calcular check-ins').item.json.page_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Testimonio Solicitado|checkbox", "checkboxValue": true }
+          ]
+        }
+      },
+      "id": "mark-testimonio-asked",
+      "name": "Notion · marcar testimonio pedido",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1340, 400],
+      "credentials": { "notionApi": { "id": "notion-marli", "name": "Notion Marli" } }
+    }
+  ],
+  "connections": {
+    "Cron · Diario 10:00": { "main": [[{ "node": "Notion · Query clientes", "type": "main", "index": 0 }]] },
+    "Notion · Query clientes": { "main": [[{ "node": "Calcular check-ins", "type": "main", "index": 0 }]] },
+    "Calcular check-ins": { "main": [[{ "node": "Switch · acción", "type": "main", "index": 0 }]] },
+    "Switch · acción": {
+      "main": [
+        [{ "node": "Email · Check-in D+7", "type": "main", "index": 0 }],
+        [{ "node": "Email · Pedir testimonio D+30", "type": "main", "index": 0 }]
+      ]
+    },
+    "Email · Check-in D+7": { "main": [[{ "node": "Notion · marcar D7 enviado", "type": "main", "index": 0 }]] },
+    "Email · Pedir testimonio D+30": { "main": [[{ "node": "Notion · marcar testimonio pedido", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
+  "tags": [{ "name": "marli" }, { "name": "onboarding" }, { "name": "checkins" }, { "name": "fase-1" }],
+  "_meta": {
+    "marli_workflow_id": "03b-onboarding-checkins",
+    "trigger": "Cron diario 10:00 CET",
+    "depends_on": ["NOTION_DB_CLIENTES_ID", "CLOUDFLARE_EMAIL_API_KEY"],
+    "fase": 1,
+    "criticidad": "S3"
+  }
+}

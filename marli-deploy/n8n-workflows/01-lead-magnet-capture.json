@@ -1,0 +1,127 @@
+{
+  "name": "Marli — Lead Magnet · Captura + Entrega",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marli-lead-magnet",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-capture",
+      "name": "Webhook · Lead capturado",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "marli-lead-magnet-capture"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar payload mínimo y normalizar.\n// Esperamos: { email, nombre?, fuente?, utm_campaign?, utm_source? }\nconst body = $input.item.json.body || $input.item.json;\n\nif (!body.email || !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(body.email)) {\n  throw new Error('Email inválido o ausente');\n}\n\nreturn {\n  email: body.email.toLowerCase().trim(),\n  nombre: (body.nombre || '').trim() || null,\n  fuente: body.fuente || 'directo',\n  utm_campaign: body.utm_campaign || null,\n  utm_source: body.utm_source || null,\n  pain_point: body.pain_point || null,\n  fecha_captura: new Date().toISOString().split('T')[0]\n};"
+      },
+      "id": "validate-payload",
+      "name": "Validar payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": "={{ $env.NOTION_DB_LEADS_ID }}",
+        "title": "={{ $json.email }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Nombre|rich_text",      "textContent": "={{ $json.nombre || '' }}" },
+            { "key": "Status|select",         "selectValue": "capturado" },
+            { "key": "Fuente|select",         "selectValue": "={{ $json.fuente }}" },
+            { "key": "UTM Campaign|rich_text","textContent": "={{ $json.utm_campaign || '' }}" },
+            { "key": "UTM Source|rich_text",  "textContent": "={{ $json.utm_source || '' }}" },
+            { "key": "Pain Point Detectado|rich_text", "textContent": "={{ $json.pain_point || '' }}" },
+            { "key": "Fecha Captura|date",    "date": "={{ $json.fecha_captura }}" },
+            { "key": "Fecha Proxima Accion|date", "date": "={{ $json.fecha_captura }}" }
+          ]
+        }
+      },
+      "id": "notion-create-lead",
+      "name": "Notion · Crear lead",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "notion-marli",
+          "name": "Notion Marli"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailchannels.net/tx/v1/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [{\n    \"to\": [{ \"email\": \"{{ $('Validar payload').item.json.email }}\", \"name\": \"{{ $('Validar payload').item.json.nombre || '' }}\" }]\n  }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Marli\" },\n  \"reply_to\": { \"email\": \"hola@marli.agency\" },\n  \"subject\": \"Tu Kit Marli está aquí 💚\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $('Validar payload').item.json.nombre || '' }},</p><p>Aquí tienes tu Kit Marli:</p><ul><li><a href='https://marli.agency/kit/crm-template'>Plantilla CRM (Notion)</a></li><li><a href='https://marli.agency/kit/plantillas-informes'>5 plantillas Word para informes</a></li><li><a href='https://marli.agency/kit/guia-rapida'>Guía rápida de instalación (5 min)</a></li></ul><p>En los próximos días te mando 6 emails cortos con cómo está usando esto otra gente como tú. Si quieres saltar la fila y montarlo conmigo en 1 hora, <a href='https://calendly.com/marli/demo'>reserva una llamada de 25 min aquí</a>.</p><p>Un abrazo,<br/>Diego (Marli)</p>\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "email-delivery",
+      "name": "Cloudflare Email · Entrega Kit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"message\": \"Kit enviado. Revisa tu bandeja en 1-2 minutos.\" }",
+        "options": {}
+      },
+      "id": "respond-200",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook · Lead capturado": {
+      "main": [[{ "node": "Validar payload", "type": "main", "index": 0 }]]
+    },
+    "Validar payload": {
+      "main": [[{ "node": "Notion · Crear lead", "type": "main", "index": 0 }]]
+    },
+    "Notion · Crear lead": {
+      "main": [[{ "node": "Cloudflare Email · Entrega Kit", "type": "main", "index": 0 }]]
+    },
+    "Cloudflare Email · Entrega Kit": {
+      "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "errorWorkflow": ""
+  },
+  "tags": [
+    { "name": "marli" },
+    { "name": "lead-magnet" },
+    { "name": "fase-1" }
+  ],
+  "_meta": {
+    "marli_workflow_id": "01-lead-magnet-capture",
+    "trigger": "POST /webhook/marli-lead-magnet con { email, nombre?, fuente?, utm_*? }",
+    "depends_on": ["NOTION_DB_LEADS_ID", "CLOUDFLARE_EMAIL_API_KEY", "credenciales: Notion API"],
+    "fase": 1,
+    "criticidad": "S1 (revenue-blocker)",
+    "next_workflow": "01b-lead-magnet-nurturing.json (cron diario)"
+  }
+}

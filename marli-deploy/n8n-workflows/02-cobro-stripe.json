@@ -1,0 +1,131 @@
+{
+  "name": "Marli — Cobro · Crear sesión Stripe",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "marli-checkout",
+        "responseMode": "responseNode",
+        "options": { "rawBody": false }
+      },
+      "id": "webhook-checkout-request",
+      "name": "Webhook · POST /checkout",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "marli-checkout"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Esperamos: { lead_id, email, producto, con_instalacion?, mantenimiento? }\n// producto: 'pack' | 'crm' | 'informes' | 'chatbot'\n// con_instalacion: bool — si true, precio sube\n// mantenimiento: bool — añadir suscripción 300€/mes\n\nconst body = $input.item.json.body || $input.item.json;\nif (!body.email || !body.producto) {\n  throw new Error('Faltan campos: email y producto son obligatorios');\n}\n\nconst PRICE_IDS = {\n  pack:               $env.STRIPE_PRICE_PACK || 'price_pack_498',\n  pack_install:       $env.STRIPE_PRICE_PACK_INSTALL || 'price_pack_install_1349',\n  crm:                $env.STRIPE_PRICE_CRM || 'price_crm_27',\n  informes_basic:     $env.STRIPE_PRICE_INFORMES_BASIC || 'price_informes_199',\n  informes_pro:       $env.STRIPE_PRICE_INFORMES_PRO || 'price_informes_449',\n  chatbot_basic:      $env.STRIPE_PRICE_CHATBOT_BASIC || 'price_chatbot_399',\n  chatbot_pro:        $env.STRIPE_PRICE_CHATBOT_PRO || 'price_chatbot_999',\n  mantenimiento:      $env.STRIPE_PRICE_MANTENIMIENTO || 'price_mantenimiento_300mo'\n};\n\nconst lineItems = [];\n\n// Producto principal\nif (body.producto === 'pack') {\n  lineItems.push({ price: body.con_instalacion ? PRICE_IDS.pack_install : PRICE_IDS.pack, quantity: 1 });\n} else if (body.producto === 'crm') {\n  lineItems.push({ price: PRICE_IDS.crm, quantity: 1 });\n} else if (body.producto === 'informes') {\n  lineItems.push({ price: body.tier === 'pro' ? PRICE_IDS.informes_pro : PRICE_IDS.informes_basic, quantity: 1 });\n} else if (body.producto === 'chatbot') {\n  lineItems.push({ price: body.tier === 'pro' ? PRICE_IDS.chatbot_pro : PRICE_IDS.chatbot_basic, quantity: 1 });\n} else {\n  throw new Error(`Producto desconocido: ${body.producto}`);\n}\n\n// Mantenimiento opcional (suscripción)\nif (body.mantenimiento) {\n  lineItems.push({ price: PRICE_IDS.mantenimiento, quantity: 1 });\n}\n\nreturn {\n  email: body.email.toLowerCase().trim(),\n  lead_id: body.lead_id || null,\n  producto: body.producto,\n  line_items: lineItems,\n  has_subscription: !!body.mantenimiento,\n  metadata: {\n    lead_id: body.lead_id || '',\n    producto: body.producto,\n    con_instalacion: String(!!body.con_instalacion),\n    fuente: 'marli-funnel'\n  }\n};"
+      },
+      "id": "build-checkout-payload",
+      "name": "Construir payload Stripe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stripe.com/v1/checkout/sessions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/x-www-form-urlencoded" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "=mode={{ $json.has_subscription ? 'subscription' : 'payment' }}&customer_email={{ $json.email }}&success_url={{ encodeURIComponent($env.MARLI_BASE_URL + '/gracias?session_id={CHECKOUT_SESSION_ID}') }}&cancel_url={{ encodeURIComponent($env.MARLI_BASE_URL + '/checkout-cancelado') }}&metadata[lead_id]={{ $json.metadata.lead_id }}&metadata[producto]={{ $json.metadata.producto }}&metadata[con_instalacion]={{ $json.metadata.con_instalacion }}&metadata[fuente]={{ $json.metadata.fuente }}{{ $json.line_items.map((li, i) => `&line_items[${i}][price]=${li.price}&line_items[${i}][quantity]=${li.quantity}`).join('') }}",
+        "options": {}
+      },
+      "id": "stripe-create-session",
+      "name": "Stripe · Crear Checkout Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "stripe-restricted-key",
+          "name": "Stripe Restricted Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $('Construir payload Stripe').item.json.lead_id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Status|select", "selectValue": "propuesta-enviada" },
+            { "key": "Stripe Checkout Session ID|rich_text", "textContent": "={{ $json.id }}" },
+            { "key": "Fecha Ultima Accion|date", "date": "={{ new Date().toISOString().split('T')[0] }}" }
+          ]
+        }
+      },
+      "id": "notion-update-lead",
+      "name": "Notion · Lead → propuesta-enviada",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      },
+      "continueOnFail": true,
+      "_doc": "Solo si lead_id viene en el payload (compras directas sin lead previo no actualizan nada)"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"checkout_url\": \"{{ $('Stripe · Crear Checkout Session').item.json.url }}\", \"session_id\": \"{{ $('Stripe · Crear Checkout Session').item.json.id }}\" }",
+        "options": {}
+      },
+      "id": "respond-checkout-url",
+      "name": "Respond · checkout URL",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook · POST /checkout": {
+      "main": [[{ "node": "Construir payload Stripe", "type": "main", "index": 0 }]]
+    },
+    "Construir payload Stripe": {
+      "main": [[{ "node": "Stripe · Crear Checkout Session", "type": "main", "index": 0 }]]
+    },
+    "Stripe · Crear Checkout Session": {
+      "main": [
+        [
+          { "node": "Notion · Lead → propuesta-enviada", "type": "main", "index": 0 },
+          { "node": "Respond · checkout URL", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "marli" },
+    { "name": "cobro" },
+    { "name": "stripe" },
+    { "name": "fase-1" }
+  ],
+  "_meta": {
+    "marli_workflow_id": "02-cobro-stripe",
+    "trigger": "POST /webhook/marli-checkout con { email, producto, con_instalacion?, mantenimiento?, lead_id?, tier? }",
+    "depends_on": ["STRIPE_PRICE_*", "Stripe restricted key (charges:write, customers:write, checkout:write, subscriptions:write)", "MARLI_BASE_URL"],
+    "fase": 1,
+    "criticidad": "S1 (revenue-blocker)",
+    "next_workflow": "02b-stripe-webhook-handler.json (recibe checkout.session.completed)",
+    "compliance_note": "Stripe Checkout Session = PCI-compliant by default. Marli nunca ve tarjeta."
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "_meta": {
+    "name": "CRM Cliente — Tareas",
+    "description": "Sistema de tareas operativas del psicologo: facturacion, llamadas, recordatorios manuales, seguimientos. Tambien usado por Li para crear tareas automaticamente cuando un paciente solicita algo (reagendar, etc.).",
+    "owner_internal": "cliente-psicologo",
+    "rgpd_data_class": "personal organizativo",
+    "indexed_for_workflows": ["chatbot-li-creates-task", "diario-tareas-pendientes"],
+    "is_product_template": true
+  },
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "CRM Cliente — Tareas"
+      }
+    }
+  ],
+  "icon": {
+    "type": "emoji",
+    "emoji": "✅"
+  },
+  "properties": {
+    "Tarea": {
+      "title": {}
+    },
+    "Status": {
+      "select": {
+        "options": [
+          { "name": "pendiente",      "color": "yellow" },
+          { "name": "en-curso",       "color": "blue"   },
+          { "name": "hecha",          "color": "green"  },
+          { "name": "cancelada",      "color": "gray"   }
+        ]
+      }
+    },
+    "Prioridad": {
+      "select": {
+        "options": [
+          { "name": "P1-urgente",     "color": "red"    },
+          { "name": "P2-alta",        "color": "orange" },
+          { "name": "P3-normal",      "color": "yellow" },
+          { "name": "P4-baja",        "color": "gray"   }
+        ]
+      }
+    },
+    "Tipo": {
+      "select": {
+        "options": [
+          { "name": "llamada",            "color": "blue"   },
+          { "name": "email",              "color": "purple" },
+          { "name": "factura",            "color": "green"  },
+          { "name": "reagendar",          "color": "yellow" },
+          { "name": "informe-pendiente",  "color": "orange" },
+          { "name": "seguimiento",        "color": "pink"   },
+          { "name": "admin",              "color": "gray"   }
+        ]
+      }
+    },
+    "Paciente Relacionado": {
+      "relation": {
+        "_doc": "Optional. Si la tarea es sobre un paciente concreto.",
+        "database_id": "PACIENTES_DB_ID_PLACEHOLDER",
+        "single_property": {}
+      }
+    },
+    "Sesion Relacionada": {
+      "relation": {
+        "database_id": "SESIONES_DB_ID_PLACEHOLDER",
+        "single_property": {}
+      }
+    },
+    "Fecha Vencimiento": {
+      "date": {}
+    },
+    "Origen": {
+      "select": {
+        "options": [
+          { "name": "manual",          "color": "gray"   },
+          { "name": "li-chatbot",      "color": "purple" },
+          { "name": "n8n-automatico",  "color": "blue"   },
+          { "name": "recurrente",      "color": "green"  }
+        ]
+      }
+    },
+    "Descripcion": {
+      "rich_text": {}
+    },
+    "Resultado": {
+      "rich_text": {
+        "_doc": "Notas al cerrar la tarea. Util para auditar acciones de Li."
+      }
+    },
+    "Created": {
+      "created_time": {}
+    },
+    "Updated": {
+      "last_edited_time": {}
+    }
+  }
+}

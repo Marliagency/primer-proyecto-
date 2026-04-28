@@ -1,0 +1,239 @@
+{
+  "name": "Marli — Cobro · Webhook Stripe (handler)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stripe-webhook",
+        "responseMode": "responseNode",
+        "options": { "rawBody": true }
+      },
+      "id": "webhook-stripe",
+      "name": "Webhook · POST /stripe-webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "stripe-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verificar firma Stripe HMAC-SHA256.\n// Stripe-Signature header: t=...,v1=...\n// Compute: HMAC_SHA256(secret, `${t}.${rawBody}`) === v1\n\nconst crypto = require('crypto');\n\nconst signature = $input.item.json.headers['stripe-signature'];\nconst rawBody = $input.item.json.body;\nconst secret = $env.STRIPE_WEBHOOK_SECRET;\n\nif (!signature || !secret) {\n  throw new Error('Falta stripe-signature header o STRIPE_WEBHOOK_SECRET');\n}\n\nconst parts = signature.split(',').reduce((acc, part) => {\n  const [k, v] = part.split('=');\n  acc[k] = v;\n  return acc;\n}, {});\n\nconst signedPayload = `${parts.t}.${rawBody}`;\nconst expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');\n\nif (expected !== parts.v1) {\n  throw new Error('Firma Stripe inválida — posible spoofing');\n}\n\n// Anti-replay: rechazar eventos > 5 min\nconst now = Math.floor(Date.now() / 1000);\nif (now - parseInt(parts.t) > 300) {\n  throw new Error('Webhook expirado (> 5 min)');\n}\n\nconst event = JSON.parse(rawBody);\nreturn {\n  type: event.type,\n  event_id: event.id,\n  data: event.data.object,\n  created: event.created\n};"
+      },
+      "id": "verify-signature",
+      "name": "Verificar firma Stripe",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "checkout.session.completed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "invoice.payment_failed",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": { "caseSensitive": true, "typeValidation": "strict" },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.type }}",
+                    "rightValue": "customer.subscription.deleted",
+                    "operator": { "type": "string", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra" }
+      },
+      "id": "switch-event-type",
+      "name": "Switch · tipo de evento",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar checkout.session.completed:\n// 1. Crear cliente en Notion (DB Clientes)\n// 2. Si había lead_id en metadata → actualizarlo a 'cliente'\n// 3. Disparar workflow Onboarding (HTTP call al webhook 03-onboarding)\n\nconst session = $input.item.json.data;\nconst metadata = session.metadata || {};\n\nreturn {\n  email: session.customer_email || session.customer_details?.email,\n  nombre: session.customer_details?.name || '',\n  stripe_customer_id: session.customer,\n  stripe_session_id: session.id,\n  amount_total: session.amount_total / 100,\n  currency: session.currency,\n  producto: metadata.producto || 'desconocido',\n  con_instalacion: metadata.con_instalacion === 'true',\n  lead_id: metadata.lead_id || null,\n  tiene_mantenimiento: session.mode === 'subscription' || !!session.subscription,\n  stripe_subscription_id: session.subscription || null,\n  fecha_compra: new Date(session.created * 1000).toISOString().split('T')[0]\n};"
+      },
+      "id": "extract-checkout-data",
+      "name": "Extraer datos checkout",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
+        "title": "={{ $json.email }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Nombre|rich_text",                "textContent": "={{ $json.nombre }}" },
+            { "key": "Status|select",                   "selectValue": "onboarding" },
+            { "key": "Productos Comprados|multi_select","multiSelectValue": "={{ $json.producto === 'pack' ? 'Pack Premium' : ($json.producto === 'crm' ? 'CRM' : ($json.producto === 'informes' ? 'Informes' : ($json.producto === 'chatbot' ? 'Chatbot Li' : ''))) }}" },
+            { "key": "Tiene Mantenimiento|checkbox",    "checkboxValue": "={{ $json.tiene_mantenimiento }}" },
+            { "key": "Necesita Instalacion|checkbox",   "checkboxValue": "={{ $json.con_instalacion }}" },
+            { "key": "Stripe Customer ID|rich_text",    "textContent": "={{ $json.stripe_customer_id }}" },
+            { "key": "Stripe Subscription ID|rich_text","textContent": "={{ $json.stripe_subscription_id || '' }}" },
+            { "key": "MRR|number",                      "numberValue": "={{ $json.tiene_mantenimiento ? 300 : 0 }}" },
+            { "key": "LTV Acumulado|number",            "numberValue": "={{ $json.amount_total }}" },
+            { "key": "Fecha Compra Inicial|date",       "date": "={{ $json.fecha_compra }}" }
+          ]
+        }
+      },
+      "id": "notion-create-cliente",
+      "name": "Notion · Crear cliente",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1120, 100],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_BASE_URL }}/webhook/marli-onboarding",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{ $json.email }}\",\n  \"nombre\": \"{{ $json.nombre }}\",\n  \"producto\": \"{{ $json.producto }}\",\n  \"con_instalacion\": {{ $json.con_instalacion }},\n  \"stripe_customer_id\": \"{{ $json.stripe_customer_id }}\"\n}",
+        "options": {}
+      },
+      "id": "trigger-onboarding",
+      "name": "Trigger workflow Onboarding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// invoice.payment_failed → marcar cliente en-riesgo + alerta\nconst invoice = $input.item.json.data;\nreturn {\n  stripe_customer_id: invoice.customer,\n  amount_due: invoice.amount_due / 100,\n  attempt_count: invoice.attempt_count,\n  next_payment_attempt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : null\n};"
+      },
+      "id": "extract-failed-payment",
+      "name": "Extraer payment failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_ALERTS || $env.TELEGRAM_BOT_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"⚠️ S2 · Pago fallido — customer {{ $json.stripe_customer_id }}, intento {{ $json.attempt_count }}, importe {{ $json.amount_due }}€\"\n}",
+        "options": {}
+      },
+      "id": "alert-payment-failed",
+      "name": "Alerta · pago fallido",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// customer.subscription.deleted → cliente churn\nconst sub = $input.item.json.data;\nreturn {\n  stripe_subscription_id: sub.id,\n  stripe_customer_id: sub.customer,\n  cancelled_at: new Date(sub.canceled_at * 1000).toISOString().split('T')[0],\n  reason: sub.cancellation_details?.reason || 'desconocida'\n};"
+      },
+      "id": "extract-churn",
+      "name": "Extraer churn",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"received\": true }",
+        "options": {}
+      },
+      "id": "respond-200",
+      "name": "Respond 200 (Stripe espera)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Webhook · POST /stripe-webhook": {
+      "main": [[{ "node": "Verificar firma Stripe", "type": "main", "index": 0 }]]
+    },
+    "Verificar firma Stripe": {
+      "main": [[{ "node": "Switch · tipo de evento", "type": "main", "index": 0 }]]
+    },
+    "Switch · tipo de evento": {
+      "main": [
+        [{ "node": "Extraer datos checkout", "type": "main", "index": 0 }],
+        [{ "node": "Extraer payment failed", "type": "main", "index": 0 }],
+        [{ "node": "Extraer churn", "type": "main", "index": 0 }],
+        [{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extraer datos checkout": {
+      "main": [[{ "node": "Notion · Crear cliente", "type": "main", "index": 0 }]]
+    },
+    "Notion · Crear cliente": {
+      "main": [[{ "node": "Trigger workflow Onboarding", "type": "main", "index": 0 }]]
+    },
+    "Trigger workflow Onboarding": {
+      "main": [[{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]]
+    },
+    "Extraer payment failed": {
+      "main": [[{ "node": "Alerta · pago fallido", "type": "main", "index": 0 }]]
+    },
+    "Alerta · pago fallido": {
+      "main": [[{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]]
+    },
+    "Extraer churn": {
+      "main": [[{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [
+    { "name": "marli" },
+    { "name": "cobro" },
+    { "name": "stripe" },
+    { "name": "webhook" },
+    { "name": "fase-1" }
+  ],
+  "_meta": {
+    "marli_workflow_id": "02b-stripe-webhook-handler",
+    "trigger": "Stripe webhook → POST /webhook/stripe-webhook (eventos: checkout.session.completed, invoice.payment_failed, customer.subscription.deleted)",
+    "depends_on": ["STRIPE_WEBHOOK_SECRET", "NOTION_DB_CLIENTES_ID", "N8N_BASE_URL", "SLACK_WEBHOOK_ALERTS o TELEGRAM_BOT_URL"],
+    "fase": 1,
+    "criticidad": "S1 (revenue-blocker + churn-detection)",
+    "config_stripe": "En el dashboard de Stripe configurar endpoint webhook = ${N8N_BASE_URL}/webhook/stripe-webhook con eventos suscritos",
+    "security_note": "rawBody=true es CRITICO para validar la firma HMAC. Si lo desactivas, n8n re-serializa el JSON y la firma falla."
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "_meta": {
+    "name": "Marli — Clientes",
+    "description": "Clientes activos de Marli (han comprado al menos un producto). Diferente de Leads: aquí solo entra quien ya pagó. Drives onboarding, mantenimiento, churn y testimoniales.",
+    "owner_internal": "marli",
+    "rgpd_data_class": "personal + facturación",
+    "retention_policy_days": 2555,
+    "indexed_for_workflows": ["onboarding", "mantenimiento", "churn-detection", "testimoniales"]
+  },
+  "title": [
+    {
+      "type": "text",
+      "text": {
+        "content": "Marli — Clientes"
+      }
+    }
+  ],
+  "icon": {
+    "type": "emoji",
+    "emoji": "💚"
+  },
+  "properties": {
+    "Email": {
+      "title": {}
+    },
+    "Nombre": {
+      "rich_text": {}
+    },
+    "Status": {
+      "select": {
+        "options": [
+          { "name": "onboarding",       "color": "yellow" },
+          { "name": "activo",           "color": "green"  },
+          { "name": "mantenimiento",    "color": "blue"   },
+          { "name": "en-riesgo",        "color": "orange" },
+          { "name": "churn",            "color": "red"    },
+          { "name": "embajador",        "color": "purple" }
+        ]
+      }
+    },
+    "Persona": {
+      "select": {
+        "options": [
+          { "name": "saturada",      "color": "blue"   },
+          { "name": "emprendedor",   "color": "purple" },
+          { "name": "clinica",       "color": "green"  }
+        ]
+      }
+    },
+    "Productos Comprados": {
+      "multi_select": {
+        "options": [
+          { "name": "CRM",             "color": "blue"   },
+          { "name": "Informes",        "color": "purple" },
+          { "name": "Chatbot Li",      "color": "pink"   },
+          { "name": "Pack Premium",    "color": "green"  },
+          { "name": "Mantenimiento",   "color": "orange" }
+        ]
+      }
+    },
+    "Tiene Mantenimiento": {
+      "checkbox": {}
+    },
+    "Necesita Instalacion": {
+      "checkbox": {}
+    },
+    "Instalacion Completada": {
+      "checkbox": {}
+    },
+    "Activacion D7": {
+      "checkbox": {}
+    },
+    "Stripe Customer ID": {
+      "rich_text": {}
+    },
+    "Stripe Subscription ID": {
+      "rich_text": {}
+    },
+    "MRR": {
+      "number": {
+        "format": "euro"
+      }
+    },
+    "LTV Acumulado": {
+      "number": {
+        "format": "euro"
+      }
+    },
+    "Fecha Compra Inicial": {
+      "date": {}
+    },
+    "Fecha Onboarding Completado": {
+      "date": {}
+    },
+    "Fecha Ultima Renovacion": {
+      "date": {}
+    },
+    "Fecha Churn": {
+      "date": {}
+    },
+    "Razon Churn": {
+      "select": {
+        "options": [
+          { "name": "precio",           "color": "red"    },
+          { "name": "no-uso",           "color": "orange" },
+          { "name": "complejidad",      "color": "yellow" },
+          { "name": "competencia",      "color": "blue"   },
+          { "name": "cierre-negocio",   "color": "gray"   },
+          { "name": "otro",             "color": "default"}
+        ]
+      }
+    },
+    "Testimonio Solicitado": {
+      "checkbox": {}
+    },
+    "Testimonio Recibido": {
+      "checkbox": {}
+    },
+    "Link Testimonio": {
+      "url": {}
+    },
+    "Notion Workspace Cliente": {
+      "url": {}
+    },
+    "Calendly Soporte": {
+      "url": {}
+    },
+    "Tags": {
+      "multi_select": {
+        "options": [
+          { "name": "VIP",                  "color": "purple" },
+          { "name": "candidato-upsell",     "color": "green"  },
+          { "name": "alto-uso",             "color": "blue"   },
+          { "name": "bajo-uso",             "color": "orange" },
+          { "name": "queja-soporte",        "color": "red"    }
+        ]
+      }
+    },
+    "Notas": {
+      "rich_text": {}
+    },
+    "Created": {
+      "created_time": {}
+    },
+    "Updated": {
+      "last_edited_time": {}
+    }
+  }
+}
