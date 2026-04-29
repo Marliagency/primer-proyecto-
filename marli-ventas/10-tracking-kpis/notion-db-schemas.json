@@ -1,0 +1,242 @@
+{
+  "_meta": {
+    "purpose": "Schemas de Notion DBs adicionales para el tracking de ventas. Importables vía Notion API o creables manualmente.",
+    "databases": [
+      "01-sales-pipeline",
+      "02-customers",
+      "03-opt-outs",
+      "04-cold-outreach",
+      "05-decisiones-marketing"
+    ]
+  },
+  "01-sales-pipeline": {
+    "name": "Sales Pipeline",
+    "description": "Pipeline de leads en distintos estados, desde cold hasta cliente",
+    "properties": {
+      "Email": {"type": "title"},
+      "Nombre": {"type": "rich_text"},
+      "Estado": {
+        "type": "select",
+        "options": [
+          {"name": "cold", "color": "gray"},
+          {"name": "contactado", "color": "blue"},
+          {"name": "interesado", "color": "yellow"},
+          {"name": "tripwire", "color": "purple"},
+          {"name": "propuesta", "color": "orange"},
+          {"name": "cliente", "color": "green"},
+          {"name": "churn", "color": "red"},
+          {"name": "no_interesado", "color": "default"}
+        ]
+      },
+      "Origen": {
+        "type": "select",
+        "options": [
+          {"name": "meta-ads", "color": "blue"},
+          {"name": "linkedin-ads", "color": "blue"},
+          {"name": "cold-email", "color": "yellow"},
+          {"name": "instagram-organico", "color": "pink"},
+          {"name": "linkedin-organico", "color": "blue"},
+          {"name": "partnership", "color": "purple"},
+          {"name": "referido", "color": "green"},
+          {"name": "seo", "color": "orange"},
+          {"name": "direct", "color": "gray"}
+        ]
+      },
+      "Producto interés": {
+        "type": "select",
+        "options": [
+          {"name": "crm", "color": "gray"},
+          {"name": "informes-basic", "color": "blue"},
+          {"name": "informes-pro", "color": "blue"},
+          {"name": "chatbot-basic", "color": "purple"},
+          {"name": "chatbot-pro", "color": "purple"},
+          {"name": "pack", "color": "green"},
+          {"name": "pack+install", "color": "green"},
+          {"name": "mantenimiento", "color": "yellow"}
+        ]
+      },
+      "Valor estimado (€)": {"type": "number", "format": "euro"},
+      "Probabilidad cierre %": {"type": "number"},
+      "Fecha primer contacto": {"type": "date"},
+      "Última interacción": {"type": "date"},
+      "Próxima acción": {"type": "rich_text"},
+      "Notas": {"type": "rich_text"},
+      "URL fuente": {"type": "url"},
+      "UTM source": {"type": "rich_text"},
+      "UTM campaign": {"type": "rich_text"},
+      "Reply detectado": {"type": "checkbox"},
+      "Verify score email": {"type": "number"},
+      "Tags": {"type": "multi_select"},
+      "Especialidad": {"type": "rich_text"},
+      "Ciudad": {"type": "rich_text"}
+    }
+  },
+  "02-customers": {
+    "name": "Customers",
+    "description": "Clientes con compra cerrada — replica del DB Clientes pero con foco financiero",
+    "properties": {
+      "Cliente": {"type": "title"},
+      "Email": {"type": "email"},
+      "Producto": {
+        "type": "select",
+        "options": [
+          {"name": "crm", "color": "gray"},
+          {"name": "informes-basic", "color": "blue"},
+          {"name": "informes-pro", "color": "blue"},
+          {"name": "chatbot-basic", "color": "purple"},
+          {"name": "chatbot-pro", "color": "purple"},
+          {"name": "pack", "color": "green"},
+          {"name": "pack+install", "color": "green"},
+          {"name": "mantenimiento", "color": "yellow"}
+        ]
+      },
+      "Valor compra (€)": {"type": "number", "format": "euro"},
+      "MRR aporta (€)": {"type": "number", "format": "euro"},
+      "LTV proyectado (€)": {"type": "number", "format": "euro"},
+      "Fecha compra": {"type": "date"},
+      "Fuente atribuida": {
+        "type": "select",
+        "options": [
+          {"name": "meta-ads", "color": "blue"},
+          {"name": "linkedin-ads", "color": "blue"},
+          {"name": "cold-email", "color": "yellow"},
+          {"name": "instagram-organico", "color": "pink"},
+          {"name": "linkedin-organico", "color": "blue"},
+          {"name": "partnership", "color": "purple"},
+          {"name": "referido", "color": "green"},
+          {"name": "seo", "color": "orange"}
+        ]
+      },
+      "Stripe customer ID": {"type": "rich_text"},
+      "Estado": {
+        "type": "select",
+        "options": [
+          {"name": "onboarding", "color": "blue"},
+          {"name": "activo", "color": "green"},
+          {"name": "pausa", "color": "yellow"},
+          {"name": "churn", "color": "red"},
+          {"name": "reembolso", "color": "red"}
+        ]
+      },
+      "NPS último": {"type": "number"},
+      "Días desde compra": {"type": "formula"},
+      "Testimonio recibido": {"type": "checkbox"},
+      "Permiso para usar testimonial": {"type": "checkbox"},
+      "Notas": {"type": "rich_text"},
+      "Lead origen (relación)": {"type": "relation", "to": "01-sales-pipeline"}
+    }
+  },
+  "03-opt-outs": {
+    "name": "Opt-outs",
+    "description": "Lista permanente de emails que han pedido baja. Guardar 5 años (LSSI). Verificar antes de cada nuevo envío.",
+    "properties": {
+      "Email": {"type": "title"},
+      "Fecha baja": {"type": "date"},
+      "Origen baja": {
+        "type": "select",
+        "options": [
+          {"name": "cold-seq-A", "color": "gray"},
+          {"name": "post-tripwire", "color": "yellow"},
+          {"name": "newsletter", "color": "blue"},
+          {"name": "manual", "color": "default"},
+          {"name": "list-unsubscribe-header", "color": "blue"}
+        ]
+      },
+      "Motivo (si proporcionó)": {"type": "rich_text"},
+      "Procesado en (segundos)": {"type": "number"},
+      "Notas": {"type": "rich_text"}
+    }
+  },
+  "04-cold-outreach": {
+    "name": "Cold Outreach Tracking",
+    "description": "Una row por lead con estado actual de la secuencia cold. Usado por workflow n8n.",
+    "properties": {
+      "Email": {"type": "title"},
+      "Nombre": {"type": "rich_text"},
+      "Status envío": {
+        "type": "select",
+        "options": [
+          {"name": "pendiente", "color": "gray"},
+          {"name": "enviado_paso_1", "color": "yellow"},
+          {"name": "enviado_paso_2", "color": "yellow"},
+          {"name": "enviado_paso_3", "color": "yellow"},
+          {"name": "enviado_paso_4", "color": "yellow"},
+          {"name": "enviado_paso_5", "color": "yellow"},
+          {"name": "respondio", "color": "green"},
+          {"name": "convertido", "color": "green"},
+          {"name": "opt_out", "color": "red"},
+          {"name": "bounce_hard", "color": "red"},
+          {"name": "no_engagement", "color": "default"}
+        ]
+      },
+      "Secuencia": {
+        "type": "select",
+        "options": [
+          {"name": "tripwire", "color": "blue"},
+          {"name": "post-tripwire", "color": "purple"},
+          {"name": "linkedin-followup", "color": "blue"}
+        ]
+      },
+      "Paso actual": {"type": "number"},
+      "Fecha último envío": {"type": "date"},
+      "Inbox usado": {
+        "type": "select",
+        "options": [
+          {"name": "pablo@get-marli.com", "color": "blue"},
+          {"name": "maria@get-marli.com", "color": "yellow"},
+          {"name": "david@get-marli.com", "color": "purple"},
+          {"name": "laura@marli-team.es", "color": "green"},
+          {"name": "carlos@marli-team.es", "color": "orange"}
+        ]
+      },
+      "Open detectado": {"type": "checkbox"},
+      "Click detectado": {"type": "checkbox"},
+      "Reply detectado": {"type": "checkbox"},
+      "Verify score email": {"type": "number"},
+      "Ciudad": {"type": "rich_text"},
+      "Especialidad": {"type": "rich_text"},
+      "Provincia": {"type": "rich_text"},
+      "Web": {"type": "url"},
+      "Fuente lista": {
+        "type": "select",
+        "options": [
+          {"name": "cop-madrid", "color": "blue"},
+          {"name": "cop-catalunya", "color": "blue"},
+          {"name": "cop-valencia", "color": "blue"},
+          {"name": "cop-otros", "color": "blue"},
+          {"name": "doctoralia", "color": "yellow"},
+          {"name": "google-maps", "color": "green"},
+          {"name": "linkedin-xray", "color": "purple"},
+          {"name": "manual", "color": "default"}
+        ]
+      }
+    }
+  },
+  "05-decisiones-marketing": {
+    "name": "Decisiones Marketing",
+    "description": "Log de decisiones >100€ con razón y resultado. Sin esto, en 6 meses no sabes por qué hiciste qué.",
+    "properties": {
+      "Decisión": {"type": "title"},
+      "Fecha": {"type": "date"},
+      "Categoría": {
+        "type": "select",
+        "options": [
+          {"name": "ads-budget", "color": "blue"},
+          {"name": "ads-creative", "color": "blue"},
+          {"name": "audience", "color": "purple"},
+          {"name": "copy-email", "color": "yellow"},
+          {"name": "landing", "color": "green"},
+          {"name": "partnership", "color": "orange"},
+          {"name": "pricing", "color": "red"},
+          {"name": "infraestructura", "color": "gray"}
+        ]
+      },
+      "Razón": {"type": "rich_text"},
+      "Riesgo": {"type": "rich_text"},
+      "Coste estimado (€)": {"type": "number", "format": "euro"},
+      "Próxima revisión": {"type": "date"},
+      "Resultado (post-revisión)": {"type": "rich_text"},
+      "Aprendizaje": {"type": "rich_text"}
+    }
+  }
+}

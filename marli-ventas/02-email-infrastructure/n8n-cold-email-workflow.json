@@ -1,0 +1,165 @@
+{
+  "name": "05 — Cold Email Sender (DIY, sin Smartlead)",
+  "_meta": {
+    "purpose": "Envía cold emails desde 5+ inboxes rotativamente, con merge tags, rate limit y tracking en Notion. Sustituye a Smartlead.ai (97€/mes) en versión gratuita.",
+    "credentials_needed": [
+      "smtp-cold-pablo: SMTP credential del inbox pablo@get-marli.com",
+      "smtp-cold-maria: SMTP credential del inbox maria@get-marli.com",
+      "smtp-cold-david: SMTP credential del inbox david@get-marli.com",
+      "smtp-cold-laura: SMTP credential laura@marli-team.es",
+      "smtp-cold-carlos: SMTP credential carlos@marli-team.es",
+      "notion-marli: Notion API con acceso a DB de envíos cold"
+    ],
+    "env_required": [
+      "NOTION_DB_COLD_OUTREACH_ID",
+      "MARLI_BASE_URL",
+      "TRIPWIRE_LANDING_URL",
+      "OPT_OUT_BASE_URL"
+    ]
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "minutes", "minutesInterval": 3 }
+          ]
+        }
+      },
+      "name": "Cron 3 min (rate limit interno)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "resource": "databasePage",
+        "databaseId": "={{$env.NOTION_DB_COLD_OUTREACH_ID}}",
+        "filter": {
+          "and": [
+            { "property": "status_envio", "select": { "equals": "pendiente" } },
+            { "property": "verify_score", "number": { "greater_than_or_equal_to": 60 } }
+          ]
+        },
+        "limit": 1
+      },
+      "name": "Query 1 lead pendiente",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [400, 300],
+      "credentials": { "notionApi": { "id": "notion-marli" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{$json.length}}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "name": "¿Hay lead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Asignar inbox rotativo basado en hash del email\nconst lead = $input.first().json;\nconst email = lead.properties.email.email || '';\nconst hash = [...email].reduce((a, c) => a + c.charCodeAt(0), 0);\nconst inboxes = [\n  { from: 'pablo@get-marli.com', from_name: 'Pablo (Marli)', cred: 'smtp-cold-pablo' },\n  { from: 'maria@get-marli.com', from_name: 'María (Marli)', cred: 'smtp-cold-maria' },\n  { from: 'david@get-marli.com', from_name: 'David (Marli)', cred: 'smtp-cold-david' },\n  { from: 'laura@marli-team.es', from_name: 'Laura (Marli)', cred: 'smtp-cold-laura' },\n  { from: 'carlos@marli-team.es', from_name: 'Carlos (Marli)', cred: 'smtp-cold-carlos' }\n];\nconst inbox = inboxes[hash % inboxes.length];\n\n// Determinar qué email de la secuencia mandar\nconst secuencia = lead.properties.secuencia.select.name || 'tripwire';\nconst paso = lead.properties.paso_secuencia.number || 1;\n\n// Variables para merge tags\nconst nombre_propio = (lead.properties.nombre.title?.[0]?.text?.content || 'compañero/a').split(' ')[0];\nconst opt_out_url = `${$env.OPT_OUT_BASE_URL}?id=${lead.id}`;\n\nreturn [{\n  json: {\n    lead_id: lead.id,\n    email: email,\n    nombre: lead.properties.nombre.title?.[0]?.text?.content,\n    nombre_propio,\n    ciudad: lead.properties.ciudad.rich_text?.[0]?.text?.content || '',\n    inbox,\n    secuencia,\n    paso,\n    opt_out_url\n  }\n}];"
+      },
+      "name": "Asignar inbox + variables",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Construir el contenido del email según secuencia + paso\nconst { secuencia, paso, nombre_propio, ciudad, opt_out_url } = $input.first().json;\nconst tripwire = $env.TRIPWIRE_LANDING_URL || 'https://marli.agency/crm-gratis';\n\nconst plantillas = {\n  tripwire: {\n    1: {\n      subject: `${nombre_propio}, una pregunta rápida sobre tu consulta`,\n      body_html: `<p>Hola ${nombre_propio},</p>\n<p>Vi tu perfil en Doctoralia/COP y soy psicólogo... me imagino que como yo, dedicas demasiado tiempo a redactar informes en Word, programar sesiones a mano y perseguir cobros.</p>\n<p>Llevo meses construyendo una herramienta que me ahorra ~8h/semana en eso (CRM + plantillas de informes + chatbot de citas).</p>\n<p>Hoy doy gratis la plantilla básica de CRM en Notion con 5 plantillas de informes ya redactadas. Sin email-trampa, sin tarjeta. Si te sirve, te sirve.</p>\n<p><a href=\"${tripwire}\">Aquí la tienes →</a></p>\n<p>Un abrazo,<br>Pablo</p>\n<p style=\"font-size:11px;color:#888;border-top:1px solid #eee;padding-top:8px\">Te escribo porque tu email aparece en tu web profesional / perfil COP. Si prefieres no recibir más mensajes, <a href=\"${opt_out_url}\">dilo aquí</a> y eliminaré tu dato. Encontrarás más info en nuestra política de privacidad.</p>`
+    },
+    2: {
+      subject: `Re: ${nombre_propio}, una pregunta rápida sobre tu consulta`,
+      body_html: `<p>${nombre_propio},</p>\n<p>Cuelo el link otra vez por si el primero quedó perdido.</p>\n<p><a href=\"${tripwire}\">Plantilla CRM Notion + 5 informes Word listos</a> — gratis, sin tarjeta.</p>\n<p>Si no te sirve, dímelo y te dejo en paz.</p>\n<p>Pablo</p>\n<p style=\"font-size:11px;color:#888\"><a href=\"${opt_out_url}\">No recibir más</a></p>`
+    },
+    3: {
+      subject: `Una historia de Mar (psicóloga en Valencia) — y cómo recuperó 8h/semana`,
+      body_html: `<p>Hola ${nombre_propio},</p>\n<p>Mar tenía la consulta llena de post-its y un Excel que se le rompía cada lunes. En 3 horas pasó todo a Notion + Word con plantillas y ahora redacta un informe en 25 min en lugar de 2h.</p>\n<p>Le dejé el sistema gratis. Le sirvió. Aquí lo tienes tú también:</p>\n<p><a href=\"${tripwire}\">Descargar plantilla Marli</a></p>\n<p>Pablo</p>\n<p style=\"font-size:11px;color:#888\"><a href=\"${opt_out_url}\">No me escribas más</a></p>`
+    },
+    4: {
+      subject: `Última vez (de verdad), ${nombre_propio}`,
+      body_html: `<p>${nombre_propio}, este es mi 4º email — el último.</p>\n<p>Si no te interesa la plantilla CRM gratis, no pasa nada, te elimino de la lista (o haz clic abajo si quieres).</p>\n<p>Pero si llegaste a abrir alguno de los anteriores y se te ha pasado, <a href=\"${tripwire}\">aquí está</a>. Te ahorra horas semanales y es literalmente gratis.</p>\n<p>Cuídate,<br>Pablo</p>\n<p style=\"font-size:11px;color:#888\"><a href=\"${opt_out_url}\">Borrarme de la lista</a></p>`
+    },
+    5: {
+      subject: `${nombre_propio}, ¿te puedo hacer 1 favor?`,
+      body_html: `<p>Hola ${nombre_propio},</p>\n<p>Si me has ignorado los 4 emails anteriores, lo entiendo, soy un desconocido. Pero antes de borrarte de la lista, me ayudaría mucho saber por qué no te interesó.</p>\n<p>¿Es porque ya tienes una herramienta? ¿Porque desconfías? ¿Porque no ves el problema? Cualquier respuesta de 1 línea me sirve.</p>\n<p>Si me dices algo, perfecto. Si no, no te escribo más.</p>\n<p>Gracias,<br>Pablo</p>\n<p style=\"font-size:11px;color:#888\"><a href=\"${opt_out_url}\">Borrarme</a></p>`
+        }
+      }\n};\n\nconst plantilla = plantillas[secuencia]?.[paso];\nif (!plantilla) {\n  throw new Error(`Plantilla no encontrada: ${secuencia}/${paso}`);\n}\n\nreturn [{ json: { ...$input.first().json, ...plantilla } }];"
+      },
+      "name": "Construir contenido email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$json.inbox.from}}",
+        "fromName": "={{$json.inbox.from_name}}",
+        "toEmail": "={{$json.email}}",
+        "subject": "={{$json.subject}}",
+        "html": "={{$json.body_html}}",
+        "options": {
+          "appendAttribution": false,
+          "headers": {
+            "List-Unsubscribe": "<{{$json.opt_out_url}}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            "X-Entity-Ref-ID": "={{$json.lead_id}}"
+          }
+        }
+      },
+      "name": "Enviar email (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "credentials": {
+        "smtp": "={{$json.inbox.cred}}"
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "pageId": "={{$json.lead_id}}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "status_envio", "selectValue": "enviado_paso_{{$json.paso}}" },
+            { "key": "fecha_ultimo_envio", "datetimeValue": "={{$now.toISO()}}" },
+            { "key": "inbox_usado", "selectValue": "={{$json.inbox.from}}" },
+            { "key": "paso_secuencia", "numberValue": "={{$json.paso + 1}}" }
+          ]
+        }
+      },
+      "name": "Actualizar Notion: enviado",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1400, 300],
+      "credentials": { "notionApi": { "id": "notion-marli" } }
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "name": "Wait 60s (humanizar ritmo)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Cron 3 min (rate limit interno)": { "main": [[{ "node": "Query 1 lead pendiente", "type": "main", "index": 0 }]] },
+    "Query 1 lead pendiente": { "main": [[{ "node": "¿Hay lead?", "type": "main", "index": 0 }]] },
+    "¿Hay lead?": { "main": [[{ "node": "Asignar inbox + variables", "type": "main", "index": 0 }]] },
+    "Asignar inbox + variables": { "main": [[{ "node": "Construir contenido email", "type": "main", "index": 0 }]] },
+    "Construir contenido email": { "main": [[{ "node": "Enviar email (SMTP)", "type": "main", "index": 0 }]] },
+    "Enviar email (SMTP)": { "main": [[{ "node": "Actualizar Notion: enviado", "type": "main", "index": 0 }]] },
+    "Actualizar Notion: enviado": { "main": [[{ "node": "Wait 60s (humanizar ritmo)", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "active": false
+}
