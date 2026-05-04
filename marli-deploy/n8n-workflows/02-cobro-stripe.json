@@ -56,13 +56,35 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "has-lead-id",
+              "leftValue": "={{ $('Construir payload Stripe').item.json.lead_id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-lead-id",
+      "name": "IF · ¿hay lead_id?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 150],
+      "_doc": "Fix S2.1: si compra directa sin lead previo, lead_id=null y el update Notion fallaba con error 400. Ahora saltamos limpiamente."
+    },
+    {
+      "parameters": {
         "resource": "databasePage",
         "operation": "update",
         "pageId": "={{ $('Construir payload Stripe').item.json.lead_id }}",
         "propertiesUi": {
           "propertyValues": [
             { "key": "Status|select", "selectValue": "propuesta-enviada" },
-            { "key": "Stripe Checkout Session ID|rich_text", "textContent": "={{ $json.id }}" },
+            { "key": "Stripe Checkout Session ID|rich_text", "textContent": "={{ $('Stripe · Crear Checkout Session').item.json.id }}" },
             { "key": "Fecha Ultima Accion|date", "date": "={{ new Date().toISOString().split('T')[0] }}" }
           ]
         }
@@ -71,12 +93,10 @@
       "name": "Notion · Lead → propuesta-enviada",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2,
-      "position": [900, 200],
+      "position": [1120, 100],
       "credentials": {
         "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
-      },
-      "continueOnFail": true,
-      "_doc": "Solo si lead_id viene en el payload (compras directas sin lead previo no actualizan nada)"
+      }
     },
     {
       "parameters": {
@@ -101,9 +121,15 @@
     "Stripe · Crear Checkout Session": {
       "main": [
         [
-          { "node": "Notion · Lead → propuesta-enviada", "type": "main", "index": 0 },
+          { "node": "IF · ¿hay lead_id?", "type": "main", "index": 0 },
           { "node": "Respond · checkout URL", "type": "main", "index": 0 }
         ]
+      ]
+    },
+    "IF · ¿hay lead_id?": {
+      "main": [
+        [{ "node": "Notion · Lead → propuesta-enviada", "type": "main", "index": 0 }],
+        []
       ]
     }
   },

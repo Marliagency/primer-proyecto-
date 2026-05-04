@@ -39,7 +39,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Calcular para cada cliente qué acción toca: D+7 (activación), D+30 (testimonio)\nconst now = new Date();\nconst out = [];\n\nfor (const cliente of $input.all()) {\n  const props = cliente.json.properties || {};\n  const compra = props['Fecha Compra Inicial']?.date?.start;\n  const activacionD7 = props['Activacion D7']?.checkbox;\n  const testimonioSolicitado = props['Testimonio Solicitado']?.checkbox;\n  if (!compra) continue;\n\n  const days = Math.floor((now - new Date(compra)) / (1000 * 60 * 60 * 24));\n\n  if (days === 7 && !activacionD7) {\n    out.push({\n      action: 'checkin_d7',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n  \n  if (days === 30 && !testimonioSolicitado) {\n    out.push({\n      action: 'request_testimonio',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n}\n\nreturn out.map(item => ({ json: item }));"
+        "jsCode": "// Calcular para cada cliente qué acción toca: D+7 (activación), D+30 (testimonio)\n// Fix S2.4: usar >= en vez de === para no perder el email si el cron falla un día.\n// El flag 'Activacion D7'/'Testimonio Solicitado' previene duplicados.\nconst now = new Date();\nconst out = [];\n\nfor (const cliente of $input.all()) {\n  const props = cliente.json.properties || {};\n  const compra = props['Fecha Compra Inicial']?.date?.start;\n  const activacionD7 = props['Activacion D7']?.checkbox;\n  const testimonioSolicitado = props['Testimonio Solicitado']?.checkbox;\n  if (!compra) continue;\n\n  const days = Math.floor((now - new Date(compra)) / (1000 * 60 * 60 * 24));\n\n  if (days >= 7 && days < 30 && !activacionD7) {\n    out.push({\n      action: 'checkin_d7',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n  \n  if (days >= 30 && !testimonioSolicitado) {\n    out.push({\n      action: 'request_testimonio',\n      page_id: cliente.json.id,\n      email: props.Email?.title?.[0]?.plain_text,\n      nombre: props.Nombre?.rich_text?.[0]?.plain_text || ''\n    });\n  }\n}\n\nreturn out.map(item => ({ json: item }));"
       },
       "id": "compute-checkins",
       "name": "Calcular check-ins",
@@ -82,21 +82,21 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.mailchannels.net/tx/v1/send",
+        "url": "https://api.resend.com/emails",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Content-Type", "value": "application/json" },
-            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+            { "name": "Authorization", "value": "Bearer {{ $env.RESEND_API_KEY }}" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"¿Cómo va la primera semana con Marli?\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $json.nombre }},</p><p>Han pasado 7 días desde que montaste Marli. ¿Está funcionando como esperabas?</p><p>Si tienes cualquier duda, responde a este email — soy yo quien lee.</p><p>Si quieres que te eche una mano para sacarle el máximo, <a href='https://calendly.com/marli/checkin-15min'>reserva una llamada de 15 min aquí</a>, sin coste.</p><p>Un abrazo,<br/>Diego</p>\" }\n  ]\n}",
+        "jsonBody": "={\n  \"from\": \"Marli <hola@marli.agency>\",\n  \"to\": [\"{{ $json.email }}\"],\n  \"reply_to\": \"hola@marli.agency\",\n  \"subject\": \"¿Cómo va la primera semana con Marli?\",\n  \"html\": \"<p>Hola {{ $json.nombre }},</p><p>Han pasado 7 días desde que montaste Marli. ¿Está funcionando como esperabas?</p><p>Si tienes cualquier duda, responde a este email — soy yo quien lee.</p><p>Si quieres que te eche una mano para sacarle el máximo, <a href='https://calendly.com/marli/checkin-15min'>reserva una llamada de 15 min aquí</a>, sin coste.</p><p>Un abrazo,<br/>Marli</p>\",\n  \"tags\": [{ \"name\": \"workflow\", \"value\": \"03b-checkins\" }, { \"name\": \"event\", \"value\": \"d7\" }]\n}",
         "options": {}
       },
       "id": "email-d7",
-      "name": "Email · Check-in D+7",
+      "name": "Resend · Check-in D+7",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1120, 200]
@@ -122,21 +122,21 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.mailchannels.net/tx/v1/send",
+        "url": "https://api.resend.com/emails",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Content-Type", "value": "application/json" },
-            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+            { "name": "Authorization", "value": "Bearer {{ $env.RESEND_API_KEY }}" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $json.email }}\", \"name\": \"{{ $json.nombre }}\" }] }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Diego (Marli)\" },\n  \"subject\": \"Un mes con Marli — ¿me regalas 90 segundos?\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $json.nombre }},</p><p>Un mes con Marli. Si te ha aportado, ¿me ayudas con un testimonio corto?</p><p>3 opciones, la que te resulte más cómoda:</p><ol><li>2 frases por email respondiendo a este (lo más fácil)</li><li>30 segundos de audio por WhatsApp al +34 6XX XXX XXX</li><li>1 minuto de vídeo desde el móvil — <a href='https://marli.agency/grabar-testimonio'>aquí explico cómo</a></li></ol><p>Lo que diga te lo pasaré antes de publicarlo, faltaría más.</p><p>Gracias 💚<br/>Diego</p>\" }\n  ]\n}",
+        "jsonBody": "={\n  \"from\": \"Marli <hola@marli.agency>\",\n  \"to\": [\"{{ $json.email }}\"],\n  \"reply_to\": \"hola@marli.agency\",\n  \"subject\": \"Un mes con Marli — ¿me regalas 90 segundos?\",\n  \"html\": \"<p>Hola {{ $json.nombre }},</p><p>Un mes con Marli. Si te ha aportado, ¿me ayudas con un testimonio corto?</p><p>3 opciones, la que te resulte más cómoda:</p><ol><li>2 frases por email respondiendo a este (lo más fácil)</li><li>30 segundos de audio por WhatsApp al +34 6XX XXX XXX</li><li>1 minuto de vídeo desde el móvil — <a href='https://marli.agency/grabar-testimonio'>aquí explico cómo</a></li></ol><p>Lo que diga te lo pasaré antes de publicarlo, faltaría más.</p><p>Gracias 💚<br/>Marli</p>\",\n  \"tags\": [{ \"name\": \"workflow\", \"value\": \"03b-checkins\" }, { \"name\": \"event\", \"value\": \"d30-testimonio\" }]\n}",
         "options": {}
       },
       "id": "email-testimonio",
-      "name": "Email · Pedir testimonio D+30",
+      "name": "Resend · Pedir testimonio D+30",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1120, 400]
@@ -166,12 +166,12 @@
     "Calcular check-ins": { "main": [[{ "node": "Switch · acción", "type": "main", "index": 0 }]] },
     "Switch · acción": {
       "main": [
-        [{ "node": "Email · Check-in D+7", "type": "main", "index": 0 }],
-        [{ "node": "Email · Pedir testimonio D+30", "type": "main", "index": 0 }]
+        [{ "node": "Resend · Check-in D+7", "type": "main", "index": 0 }],
+        [{ "node": "Resend · Pedir testimonio D+30", "type": "main", "index": 0 }]
       ]
     },
-    "Email · Check-in D+7": { "main": [[{ "node": "Notion · marcar D7 enviado", "type": "main", "index": 0 }]] },
-    "Email · Pedir testimonio D+30": { "main": [[{ "node": "Notion · marcar testimonio pedido", "type": "main", "index": 0 }]] }
+    "Resend · Check-in D+7": { "main": [[{ "node": "Notion · marcar D7 enviado", "type": "main", "index": 0 }]] },
+    "Resend · Pedir testimonio D+30": { "main": [[{ "node": "Notion · marcar testimonio pedido", "type": "main", "index": 0 }]] }
   },
   "active": false,
   "settings": { "executionOrder": "v1", "saveExecutionProgress": true },
@@ -179,7 +179,7 @@
   "_meta": {
     "marli_workflow_id": "03b-onboarding-checkins",
     "trigger": "Cron diario 10:00 CET",
-    "depends_on": ["NOTION_DB_CLIENTES_ID", "CLOUDFLARE_EMAIL_API_KEY"],
+    "depends_on": ["NOTION_DB_CLIENTES_ID", "RESEND_API_KEY"],
     "fase": 1,
     "criticidad": "S3"
   }

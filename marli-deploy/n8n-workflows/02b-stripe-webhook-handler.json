@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Verificar firma Stripe HMAC-SHA256.\n// Stripe-Signature header: t=...,v1=...\n// Compute: HMAC_SHA256(secret, `${t}.${rawBody}`) === v1\n\nconst crypto = require('crypto');\n\nconst signature = $input.item.json.headers['stripe-signature'];\nconst rawBody = $input.item.json.body;\nconst secret = $env.STRIPE_WEBHOOK_SECRET;\n\nif (!signature || !secret) {\n  throw new Error('Falta stripe-signature header o STRIPE_WEBHOOK_SECRET');\n}\n\nconst parts = signature.split(',').reduce((acc, part) => {\n  const [k, v] = part.split('=');\n  acc[k] = v;\n  return acc;\n}, {});\n\nconst signedPayload = `${parts.t}.${rawBody}`;\nconst expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');\n\nif (expected !== parts.v1) {\n  throw new Error('Firma Stripe inválida — posible spoofing');\n}\n\n// Anti-replay: rechazar eventos > 5 min\nconst now = Math.floor(Date.now() / 1000);\nif (now - parseInt(parts.t) > 300) {\n  throw new Error('Webhook expirado (> 5 min)');\n}\n\nconst event = JSON.parse(rawBody);\nreturn {\n  type: event.type,\n  event_id: event.id,\n  data: event.data.object,\n  created: event.created\n};"
+        "jsCode": "// Verificar firma Stripe HMAC-SHA256 con timingSafeEqual.\n// Stripe-Signature header: t=...,v1=...\n// Compute: HMAC_SHA256(secret, `${t}.${rawBody}`) === v1\n//\n// Fixes aplicados (Fase A audit):\n//   S1.4 — usa crypto.timingSafeEqual en vez de !== para evitar timing-attacks.\n//   S1.5 — fuerza rawBody a string UTF-8 si llega como Buffer.\n\nconst crypto = require('crypto');\n\nconst signature = $input.item.json.headers['stripe-signature'];\nconst rawBodyRaw = $input.item.json.body;\nconst secret = $env.STRIPE_WEBHOOK_SECRET;\n\nif (!signature || !secret) {\n  throw new Error('Falta stripe-signature header o STRIPE_WEBHOOK_SECRET');\n}\n\n// S1.5 — normalizar rawBody a string UTF-8 (n8n a veces lo da como Buffer).\nlet rawBody;\nif (typeof rawBodyRaw === 'string') {\n  rawBody = rawBodyRaw;\n} else if (Buffer.isBuffer(rawBodyRaw)) {\n  rawBody = rawBodyRaw.toString('utf8');\n} else {\n  // Si n8n ya parseó el JSON, lo reserializamos. Esto es subóptimo pero rescatable.\n  rawBody = JSON.stringify(rawBodyRaw);\n}\n\nconst parts = signature.split(',').reduce((acc, part) => {\n  const idx = part.indexOf('=');\n  if (idx === -1) return acc;\n  acc[part.slice(0, idx)] = part.slice(idx + 1);\n  return acc;\n}, {});\n\nif (!parts.t || !parts.v1) {\n  throw new Error('Stripe-Signature mal formado');\n}\n\nconst signedPayload = `${parts.t}.${rawBody}`;\nconst expected = crypto.createHmac('sha256', secret).update(signedPayload).digest('hex');\n\n// S1.4 — comparación timing-safe.\nconst expectedBuf = Buffer.from(expected, 'hex');\nconst receivedBuf = Buffer.from(parts.v1, 'hex');\nif (expectedBuf.length !== receivedBuf.length || !crypto.timingSafeEqual(expectedBuf, receivedBuf)) {\n  throw new Error('Firma Stripe inválida — posible spoofing');\n}\n\n// Anti-replay: rechazar eventos > 5 min\nconst now = Math.floor(Date.now() / 1000);\nif (now - parseInt(parts.t, 10) > 300) {\n  throw new Error('Webhook expirado (> 5 min)');\n}\n\nconst event = JSON.parse(rawBody);\nreturn {\n  type: event.type,\n  event_id: event.id,\n  data: event.data.object,\n  created: event.created\n};"
       },
       "id": "verify-signature",
       "name": "Verificar firma Stripe",
@@ -80,7 +80,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Procesar checkout.session.completed:\n// 1. Crear cliente en Notion (DB Clientes)\n// 2. Si había lead_id en metadata → actualizarlo a 'cliente'\n// 3. Disparar workflow Onboarding (HTTP call al webhook 03-onboarding)\n\nconst session = $input.item.json.data;\nconst metadata = session.metadata || {};\n\nreturn {\n  email: session.customer_email || session.customer_details?.email,\n  nombre: session.customer_details?.name || '',\n  stripe_customer_id: session.customer,\n  stripe_session_id: session.id,\n  amount_total: session.amount_total / 100,\n  currency: session.currency,\n  producto: metadata.producto || 'desconocido',\n  con_instalacion: metadata.con_instalacion === 'true',\n  lead_id: metadata.lead_id || null,\n  tiene_mantenimiento: session.mode === 'subscription' || !!session.subscription,\n  stripe_subscription_id: session.subscription || null,\n  fecha_compra: new Date(session.created * 1000).toISOString().split('T')[0]\n};"
+        "jsCode": "// Procesar checkout.session.completed:\n//   1. Extraer datos del session\n//   2. (S1.3) Idempotencia se chequea en el siguiente nodo Notion antes de crear cliente\n//   3. Crear cliente en Notion (DB Clientes)\n//   4. Disparar workflow Onboarding\n\nconst session = $input.item.json.data;\nconst event_id = $input.item.json.event_id;\nconst metadata = session.metadata || {};\n\nreturn {\n  event_id,\n  email: session.customer_email || session.customer_details?.email,\n  nombre: session.customer_details?.name || '',\n  stripe_customer_id: session.customer,\n  stripe_session_id: session.id,\n  amount_total: session.amount_total / 100,\n  currency: session.currency,\n  producto: metadata.producto || 'desconocido',\n  con_instalacion: metadata.con_instalacion === 'true',\n  lead_id: metadata.lead_id || null,\n  tiene_mantenimiento: session.mode === 'subscription' || !!session.subscription,\n  stripe_subscription_id: session.subscription || null,\n  fecha_compra: new Date(session.created * 1000).toISOString().split('T')[0]\n};"
       },
       "id": "extract-checkout-data",
       "name": "Extraer datos checkout",
@@ -91,20 +91,71 @@
     {
       "parameters": {
         "resource": "databasePage",
+        "operation": "getAll",
         "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
-        "title": "={{ $json.email }}",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Stripe Session ID|rich_text",
+              "condition": "equals",
+              "richTextValue": "={{ $json.stripe_session_id }}"
+            }
+          ]
+        }
+      },
+      "id": "idempotency-check",
+      "name": "Notion · ¿Cliente ya existe? (idempotencia)",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1120, 100],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      },
+      "_doc": "Fix S1.3: si Stripe reenvia el evento (porque tardamos > 3s en responder 200), evitamos crear cliente duplicado. Si esta query devuelve >= 1 resultado, saltamos la rama de creacion."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "no-existe",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-no-duplicate",
+      "name": "IF · ¿Cliente nuevo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 100]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
+        "title": "={{ $('Extraer datos checkout').item.json.email }}",
         "propertiesUi": {
           "propertyValues": [
-            { "key": "Nombre|rich_text",                "textContent": "={{ $json.nombre }}" },
+            { "key": "Nombre|rich_text",                "textContent": "={{ $('Extraer datos checkout').item.json.nombre }}" },
             { "key": "Status|select",                   "selectValue": "onboarding" },
-            { "key": "Productos Comprados|multi_select","multiSelectValue": "={{ $json.producto === 'pack' ? 'Pack Premium' : ($json.producto === 'crm' ? 'CRM' : ($json.producto === 'informes' ? 'Informes' : ($json.producto === 'chatbot' ? 'Chatbot Li' : ''))) }}" },
-            { "key": "Tiene Mantenimiento|checkbox",    "checkboxValue": "={{ $json.tiene_mantenimiento }}" },
-            { "key": "Necesita Instalacion|checkbox",   "checkboxValue": "={{ $json.con_instalacion }}" },
-            { "key": "Stripe Customer ID|rich_text",    "textContent": "={{ $json.stripe_customer_id }}" },
-            { "key": "Stripe Subscription ID|rich_text","textContent": "={{ $json.stripe_subscription_id || '' }}" },
-            { "key": "MRR|number",                      "numberValue": "={{ $json.tiene_mantenimiento ? 300 : 0 }}" },
-            { "key": "LTV Acumulado|number",            "numberValue": "={{ $json.amount_total }}" },
-            { "key": "Fecha Compra Inicial|date",       "date": "={{ $json.fecha_compra }}" }
+            { "key": "Productos Comprados|multi_select","multiSelectValue": "={{ $('Extraer datos checkout').item.json.producto === 'pack' ? 'Pack Premium' : ($('Extraer datos checkout').item.json.producto === 'crm' ? 'CRM' : ($('Extraer datos checkout').item.json.producto === 'informes' ? 'Informes' : ($('Extraer datos checkout').item.json.producto === 'chatbot' ? 'Chatbot Li' : ''))) }}" },
+            { "key": "Tiene Mantenimiento|checkbox",    "checkboxValue": "={{ $('Extraer datos checkout').item.json.tiene_mantenimiento }}" },
+            { "key": "Necesita Instalacion|checkbox",   "checkboxValue": "={{ $('Extraer datos checkout').item.json.con_instalacion }}" },
+            { "key": "Stripe Customer ID|rich_text",    "textContent": "={{ $('Extraer datos checkout').item.json.stripe_customer_id }}" },
+            { "key": "Stripe Session ID|rich_text",     "textContent": "={{ $('Extraer datos checkout').item.json.stripe_session_id }}" },
+            { "key": "Stripe Subscription ID|rich_text","textContent": "={{ $('Extraer datos checkout').item.json.stripe_subscription_id || '' }}" },
+            { "key": "MRR|number",                      "numberValue": "={{ $('Extraer datos checkout').item.json.tiene_mantenimiento ? 300 : 0 }}" },
+            { "key": "LTV Acumulado|number",            "numberValue": "={{ $('Extraer datos checkout').item.json.amount_total }}" },
+            { "key": "Fecha Compra Inicial|date",       "date": "={{ $('Extraer datos checkout').item.json.fecha_compra }}" }
           ]
         }
       },
@@ -112,10 +163,11 @@
       "name": "Notion · Crear cliente",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2,
-      "position": [1120, 100],
+      "position": [1560, 50],
       "credentials": {
         "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
-      }
+      },
+      "_doc": "REQUIERE schema DB Clientes con propiedad 'Stripe Session ID' (rich_text). Verificar antes de activar."
     },
     {
       "parameters": {
@@ -123,14 +175,14 @@
         "url": "={{ $env.N8N_BASE_URL }}/webhook/marli-onboarding",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"email\": \"{{ $json.email }}\",\n  \"nombre\": \"{{ $json.nombre }}\",\n  \"producto\": \"{{ $json.producto }}\",\n  \"con_instalacion\": {{ $json.con_instalacion }},\n  \"stripe_customer_id\": \"{{ $json.stripe_customer_id }}\"\n}",
+        "jsonBody": "={\n  \"email\": \"{{ $('Extraer datos checkout').item.json.email }}\",\n  \"nombre\": \"{{ $('Extraer datos checkout').item.json.nombre }}\",\n  \"producto\": \"{{ $('Extraer datos checkout').item.json.producto }}\",\n  \"con_instalacion\": {{ $('Extraer datos checkout').item.json.con_instalacion }},\n  \"stripe_customer_id\": \"{{ $('Extraer datos checkout').item.json.stripe_customer_id }}\"\n}",
         "options": {}
       },
       "id": "trigger-onboarding",
       "name": "Trigger workflow Onboarding",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 100]
+      "position": [1780, 50]
     },
     {
       "parameters": {
@@ -145,7 +197,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.SLACK_WEBHOOK_ALERTS || $env.TELEGRAM_BOT_URL }}",
+        "url": "={{ $env.ALERTS_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"text\": \"⚠️ S2 · Pago fallido — customer {{ $json.stripe_customer_id }}, intento {{ $json.attempt_count }}, importe {{ $json.amount_due }}€\"\n}",
@@ -155,7 +207,8 @@
       "name": "Alerta · pago fallido",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [1120, 300],
+      "_doc": "Fix S2.5: usar una sola env ALERTS_WEBHOOK_URL (apunta a Slack o Telegram según prefieras). Antes había `SLACK_WEBHOOK_ALERTS || TELEGRAM_BOT_URL` que no funciona en n8n templating."
     },
     {
       "parameters": {
@@ -169,6 +222,59 @@
     },
     {
       "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": "={{ $env.NOTION_DB_CLIENTES_ID }}",
+        "returnAll": false,
+        "limit": 1,
+        "filterType": "manual",
+        "matchType": "anyFilter",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Stripe Customer ID|rich_text",
+              "condition": "equals",
+              "richTextValue": "={{ $json.stripe_customer_id }}"
+            }
+          ]
+        }
+      },
+      "id": "find-cliente-churn",
+      "name": "Notion · Buscar cliente churn",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1120, 500],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": "={{ $json.id }}",
+        "propertiesUi": {
+          "propertyValues": [
+            { "key": "Status|select", "selectValue": "churn" },
+            { "key": "Fecha Churn|date", "date": "={{ $('Extraer churn').item.json.cancelled_at }}" },
+            { "key": "Motivo Churn|rich_text", "textContent": "={{ $('Extraer churn').item.json.reason }}" },
+            { "key": "MRR|number", "numberValue": 0 }
+          ]
+        }
+      },
+      "id": "notion-mark-churn",
+      "name": "Notion · Marcar churn",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1340, 500],
+      "credentials": {
+        "notionApi": { "id": "notion-marli", "name": "Notion Marli" }
+      },
+      "continueOnFail": true,
+      "_doc": "Fix S1.2: rama churn antes solo extraía datos y respondía 200 sin actualizar Notion. El cliente cancelado quedaba como activo en CRM. Ahora se marca churn + se pone MRR=0."
+    },
+    {
+      "parameters": {
         "respondWith": "json",
         "responseBody": "={ \"received\": true }",
         "options": {}
@@ -177,7 +283,7 @@
       "name": "Respond 200 (Stripe espera)",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1560, 300]
+      "position": [1780, 300]
     }
   ],
   "connections": {
@@ -196,7 +302,16 @@
       ]
     },
     "Extraer datos checkout": {
-      "main": [[{ "node": "Notion · Crear cliente", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Notion · ¿Cliente ya existe? (idempotencia)", "type": "main", "index": 0 }]]
+    },
+    "Notion · ¿Cliente ya existe? (idempotencia)": {
+      "main": [[{ "node": "IF · ¿Cliente nuevo?", "type": "main", "index": 0 }]]
+    },
+    "IF · ¿Cliente nuevo?": {
+      "main": [
+        [{ "node": "Notion · Crear cliente", "type": "main", "index": 0 }],
+        [{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]
+      ]
     },
     "Notion · Crear cliente": {
       "main": [[{ "node": "Trigger workflow Onboarding", "type": "main", "index": 0 }]]
@@ -211,6 +326,12 @@
       "main": [[{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]]
     },
     "Extraer churn": {
+      "main": [[{ "node": "Notion · Buscar cliente churn", "type": "main", "index": 0 }]]
+    },
+    "Notion · Buscar cliente churn": {
+      "main": [[{ "node": "Notion · Marcar churn", "type": "main", "index": 0 }]]
+    },
+    "Notion · Marcar churn": {
       "main": [[{ "node": "Respond 200 (Stripe espera)", "type": "main", "index": 0 }]]
     }
   },
@@ -230,10 +351,12 @@
   "_meta": {
     "marli_workflow_id": "02b-stripe-webhook-handler",
     "trigger": "Stripe webhook → POST /webhook/stripe-webhook (eventos: checkout.session.completed, invoice.payment_failed, customer.subscription.deleted)",
-    "depends_on": ["STRIPE_WEBHOOK_SECRET", "NOTION_DB_CLIENTES_ID", "N8N_BASE_URL", "SLACK_WEBHOOK_ALERTS o TELEGRAM_BOT_URL"],
+    "depends_on": ["STRIPE_WEBHOOK_SECRET", "NOTION_DB_CLIENTES_ID", "N8N_BASE_URL", "ALERTS_WEBHOOK_URL"],
+    "schema_requirements": "DB Clientes debe tener propiedades: 'Stripe Session ID' (rich_text), 'Fecha Churn' (date), 'Motivo Churn' (rich_text). Si faltan, añadir al schema 02-clientes.json antes de activar.",
     "fase": 1,
     "criticidad": "S1 (revenue-blocker + churn-detection)",
     "config_stripe": "En el dashboard de Stripe configurar endpoint webhook = ${N8N_BASE_URL}/webhook/stripe-webhook con eventos suscritos",
-    "security_note": "rawBody=true es CRITICO para validar la firma HMAC. Si lo desactivas, n8n re-serializa el JSON y la firma falla."
+    "security_note": "rawBody=true es CRITICO para validar la firma HMAC. Si lo desactivas, n8n re-serializa el JSON y la firma falla.",
+    "audit_fixes_applied": ["S1.2 register churn in Notion", "S1.3 idempotency check by Stripe Session ID", "S1.4 timing-safe signature compare", "S1.5 rawBody Buffer handling", "S2.5 single ALERTS_WEBHOOK_URL env var"]
   }
 }

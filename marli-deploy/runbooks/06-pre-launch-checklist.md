@@ -47,14 +47,15 @@
 - [ ] Tax automático configurado (España: 21% servicios)
 - [ ] Stripe Invoicing activado
 
-### Email (Cloudflare/MailChannels)
+### Email (Resend)
 
-- [ ] DNS SPF configurado y verificado en `mail-tester.com` (target: 10/10)
-- [ ] DNS DKIM configurado y verificado
+- [ ] Cuenta Resend creada y dominio `marli.agency` verificado
+- [ ] DNS SPF (`v=spf1 include:_spf.resend.com ~all`) configurado y verificado en `mail-tester.com` (target: 10/10)
+- [ ] DNS DKIM (`resend._domainkey`) configurado y verificado
 - [ ] DNS DMARC en `p=quarantine` (no `none`, no `reject` aún)
+- [ ] `RESEND_API_KEY` creado con scope dominio `marli.agency` y guardado en `.env`
 - [ ] Test envío `hola@marli.agency` → tu Gmail llega a INBOX (no spam)
-- [ ] Test recepción `hola@marli.agency` → tu Gmail vía Email Routing
-- [ ] Bounce monitoring configurado (alerta si > 2%)
+- [ ] Bounce monitoring configurado en panel Resend (alerta si > 2%)
 
 ### Anthropic
 

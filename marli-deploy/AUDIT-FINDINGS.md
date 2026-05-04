@@ -6,6 +6,28 @@
 
 ---
 
+## Estado: Fase A APLICADA ✓ (commit pendiente — ver al final)
+
+**Aplicado en este branch**:
+- ✅ S1.1 — Migración MailChannels → Resend en los 5 workflows
+- ✅ S1.2 — Churn ahora se registra en Notion (rama `customer.subscription.deleted` actualizada)
+- ✅ S1.3 — Idempotencia en webhook Stripe (chequeo Stripe Session ID antes de crear cliente)
+- ✅ S1.4 — `crypto.timingSafeEqual` en verificación de firma
+- ✅ S1.5 — `rawBody` normalizado a string UTF-8 antes de HMAC
+- ✅ S1.6 — Filtro `Resumen IA is empty` en informes-auto
+- ✅ S2.1 — IF antes de update Notion lead (skip si lead_id null)
+- ✅ S2.2 — Quitado `date: ""` que rechazaba la API Notion
+- ✅ S2.3 — Reordenado: Notion update primero, email después (03-onboarding)
+- ✅ S2.4 — `days >= 7` en cron checkins (no se pierde si cron falla un día)
+- ✅ S2.5 — Una sola env var `ALERTS_WEBHOOK_URL` en vez de `SLACK || TELEGRAM`
+- ✅ Schema Clientes actualizado con `Stripe Session ID` (rich_text) y `Motivo Churn` (rich_text)
+- ✅ Runbook 04 reescrito de MailChannels → Resend
+- ✅ README + runbook 02/05/06 actualizados con `RESEND_API_KEY`
+
+**Pendiente (Fase B + C)**: S1.7 anti-bot lead capture, S1.8 multi-tenant Notion, S2.6 nombre founder, S2.7 Notion API version, todos los S3.
+
+---
+
 ## Resumen ejecutivo
 
 El repo contiene **código real ejecutable** (7 workflows n8n, 1 skill Notion CRM, 6 scrapers de lead-gen, 5 schemas Notion) más **plans on paper** (~150 markdowns).

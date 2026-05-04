@@ -30,7 +30,7 @@ Tras el import, los nodos que requieren credentials estarán marcados en **rojo*
 
 - **Notion nodes** → Credential dropdown → seleccionar `notion-marli` o `notion-cliente` según indique el `_meta` del workflow.
 - **HTTP Request nodes con Stripe** → seleccionar `stripe-restricted-key`.
-- **HTTP Request nodes con MailChannels** → no requieren credential (autenticación por header desde `$env`).
+- **HTTP Request nodes con Resend** → no requieren credential (autenticación por header desde `$env.RESEND_API_KEY`).
 - **HTTP Request nodes con Anthropic** → no requieren credential (header desde `$env`).
 
 ### 3. Verificar variables de entorno

@@ -58,21 +58,21 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.mailchannels.net/tx/v1/send",
+        "url": "https://api.resend.com/emails",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Content-Type", "value": "application/json" },
-            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+            { "name": "Authorization", "value": "Bearer {{ $env.RESEND_API_KEY }}" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"personalizations\": [{\n    \"to\": [{ \"email\": \"{{ $('Validar payload').item.json.email }}\", \"name\": \"{{ $('Validar payload').item.json.nombre || '' }}\" }]\n  }],\n  \"from\": { \"email\": \"hola@marli.agency\", \"name\": \"Marli\" },\n  \"reply_to\": { \"email\": \"hola@marli.agency\" },\n  \"subject\": \"Tu Kit Marli está aquí 💚\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hola {{ $('Validar payload').item.json.nombre || '' }},</p><p>Aquí tienes tu Kit Marli:</p><ul><li><a href='https://marli.agency/kit/crm-template'>Plantilla CRM (Notion)</a></li><li><a href='https://marli.agency/kit/plantillas-informes'>5 plantillas Word para informes</a></li><li><a href='https://marli.agency/kit/guia-rapida'>Guía rápida de instalación (5 min)</a></li></ul><p>En los próximos días te mando 6 emails cortos con cómo está usando esto otra gente como tú. Si quieres saltar la fila y montarlo conmigo en 1 hora, <a href='https://calendly.com/marli/demo'>reserva una llamada de 25 min aquí</a>.</p><p>Un abrazo,<br/>Diego (Marli)</p>\" }\n  ]\n}",
+        "jsonBody": "={\n  \"from\": \"Marli <hola@marli.agency>\",\n  \"to\": [\"{{ $('Validar payload').item.json.email }}\"],\n  \"reply_to\": \"hola@marli.agency\",\n  \"subject\": \"Tu Kit Marli está aquí 💚\",\n  \"html\": \"<p>Hola {{ $('Validar payload').item.json.nombre || '' }},</p><p>Aquí tienes tu Kit Marli:</p><ul><li><a href='https://marli.agency/kit/crm-template'>Plantilla CRM (Notion)</a></li><li><a href='https://marli.agency/kit/plantillas-informes'>5 plantillas Word para informes</a></li><li><a href='https://marli.agency/kit/guia-rapida'>Guía rápida de instalación (5 min)</a></li></ul><p>En los próximos días te mando 6 emails cortos con cómo está usando esto otra gente como tú. Si quieres saltar la fila y montarlo conmigo en 1 hora, <a href='https://calendly.com/marli/demo'>reserva una llamada de 25 min aquí</a>.</p><p>Un abrazo,<br/>Marli</p>\",\n  \"tags\": [{ \"name\": \"workflow\", \"value\": \"01-lead-magnet-capture\" }]\n}",
         "options": {}
       },
       "id": "email-delivery",
-      "name": "Cloudflare Email · Entrega Kit",
+      "name": "Resend · Entrega Kit",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [900, 300]
@@ -98,9 +98,9 @@
       "main": [[{ "node": "Notion · Crear lead", "type": "main", "index": 0 }]]
     },
     "Notion · Crear lead": {
-      "main": [[{ "node": "Cloudflare Email · Entrega Kit", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Resend · Entrega Kit", "type": "main", "index": 0 }]]
     },
-    "Cloudflare Email · Entrega Kit": {
+    "Resend · Entrega Kit": {
       "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]]
     }
   },
@@ -119,7 +119,7 @@
   "_meta": {
     "marli_workflow_id": "01-lead-magnet-capture",
     "trigger": "POST /webhook/marli-lead-magnet con { email, nombre?, fuente?, utm_*? }",
-    "depends_on": ["NOTION_DB_LEADS_ID", "CLOUDFLARE_EMAIL_API_KEY", "credenciales: Notion API"],
+    "depends_on": ["NOTION_DB_LEADS_ID", "RESEND_API_KEY", "credenciales: Notion API"],
     "fase": 1,
     "criticidad": "S1 (revenue-blocker)",
     "next_workflow": "01b-lead-magnet-nurturing.json (cron diario)"

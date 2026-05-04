@@ -76,6 +76,9 @@
     "Stripe Subscription ID": {
       "rich_text": {}
     },
+    "Stripe Session ID": {
+      "rich_text": {}
+    },
     "MRR": {
       "number": {
         "format": "euro"
@@ -109,6 +112,9 @@
           { "name": "otro",             "color": "default"}
         ]
       }
+    },
+    "Motivo Churn": {
+      "rich_text": {}
     },
     "Testimonio Solicitado": {
       "checkbox": {}

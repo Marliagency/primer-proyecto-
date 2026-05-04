@@ -54,12 +54,12 @@ STRIPE_PRICE_INFORMES_PRO=price_xxx
 STRIPE_PRICE_CHATBOT_BASIC=price_xxx
 STRIPE_PRICE_CHATBOT_PRO=price_xxx
 
-CLOUDFLARE_EMAIL_API_KEY=xxx           # ver runbook 04
+RESEND_API_KEY=re_xxx                  # ver runbook 04
 
 N8N_BASE_URL=https://marli.app.n8n.cloud
 MARLI_BASE_URL=https://marli.agency
 CLIENTE_PSICOLOGO_EMAIL=psicologo@example.com
-SLACK_WEBHOOK_ALERTS=https://hooks.slack.com/services/xxx
+ALERTS_WEBHOOK_URL=https://hooks.slack.com/services/xxx
 ```
 
 ### 3. Crear credentials en n8n

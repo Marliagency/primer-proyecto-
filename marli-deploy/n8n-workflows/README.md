@@ -6,13 +6,13 @@ Workflows JSON listos para importar en n8n (drag & drop o `Import from File`).
 
 | # | Workflow | Trigger | Fase | Criticidad | Dependencias clave |
 |---|---|---|---|---|---|
-| 01 | `01-lead-magnet-capture.json` | Webhook POST `/marli-lead-magnet` | 1 | S1 | Notion Leads, Cloudflare Email |
-| 01b | `01b-lead-magnet-nurturing.json` | Cron diario 9:00 | 1 | S2 | Notion Leads, Cloudflare Email, templates HTML |
+| 01 | `01-lead-magnet-capture.json` | Webhook POST `/marli-lead-magnet` | 1 | S1 | Notion Leads, Resend |
+| 01b | `01b-lead-magnet-nurturing.json` | Cron diario 9:00 | 1 | S2 | Notion Leads, Resend, templates HTML |
 | 02 | `02-cobro-stripe.json` | Webhook POST `/marli-checkout` | 1 | S1 | Stripe restricted key, Notion Leads |
 | 02b | `02b-stripe-webhook-handler.json` | Webhook POST `/stripe-webhook` | 1 | S1 | STRIPE_WEBHOOK_SECRET, Notion Clientes |
-| 03 | `03-onboarding.json` | Webhook POST `/marli-onboarding` (lo dispara 02b) | 1 | S2 | Notion Clientes, Cloudflare Email |
-| 03b | `03b-onboarding-checkins.json` | Cron diario 10:00 | 1 | S3 | Notion Clientes, Cloudflare Email |
-| 04 | `04-informes-auto.json` | Cron 15min · poll Sesiones | 1 | S2 | Notion Sesiones, Anthropic API, Cloudflare Email |
+| 03 | `03-onboarding.json` | Webhook POST `/marli-onboarding` (lo dispara 02b) | 1 | S2 | Notion Clientes, Resend |
+| 03b | `03b-onboarding-checkins.json` | Cron diario 10:00 | 1 | S3 | Notion Clientes, Resend |
+| 04 | `04-informes-auto.json` | Cron 15min · poll Sesiones | 1 | S2 | Notion Sesiones, Anthropic API, Resend |
 | 05 | (TBD Fase 2) chatbot-li | Webhook POST `/li-message` | 2 | S1 | Anthropic API, RAG, embeddings |
 | 06 | (TBD Fase 2) recordatorios | Cron diario 18:00 | 2 | S3 | Notion Sesiones, WhatsApp Business |
 
@@ -53,7 +53,7 @@ Antes de importar, ten estas credentials creadas en `Settings → Credentials`:
 | `notion-cliente` | Notion API | `NOTION_INTEGRATION_TOKEN_CLIENTE` | Workspace del psicólogo cliente (DBs Pacientes/Sesiones/Tareas) |
 | `stripe-restricted-key` | HTTP Header Auth | `Authorization: Bearer ${STRIPE_RESTRICTED_KEY}` | Scope: charges:write, customers:write, checkout:write, subs:write |
 
-Anthropic, Cloudflare Email y los DB IDs Notion van por **variables de entorno** (n8n los lee de `$env`). Configurar en `Settings → Environment Variables` o en el `.env` del contenedor n8n.
+Anthropic, Resend y los DB IDs Notion van por **variables de entorno** (n8n los lee de `$env`). Configurar en `Settings → Environment Variables` o en el `.env` del contenedor n8n.
 
 ## Variables de entorno requeridas
 
@@ -75,12 +75,12 @@ STRIPE_PRICE_PACK_INSTALL=price_xxxxx
 STRIPE_PRICE_MANTENIMIENTO=price_xxxxx
 # (otros precios Stripe ver bootstrap)
 
-CLOUDFLARE_EMAIL_API_KEY=xxxxx
+RESEND_API_KEY=re_xxxxx
 
 N8N_BASE_URL=https://n8n.marli.agency
 MARLI_BASE_URL=https://marli.agency
 CLIENTE_PSICOLOGO_EMAIL=psicologo@example.com
-SLACK_WEBHOOK_ALERTS=https://hooks.slack.com/...
+ALERTS_WEBHOOK_URL=https://hooks.slack.com/... # o URL Telegram/Discord/etc
 ```
 
 ## Versionado
@@ -95,7 +95,7 @@ SLACK_WEBHOOK_ALERTS=https://hooks.slack.com/...
 |---|---|---|
 | Workflow falla en Notion node con 401 | Token caducado o no compartido con la DB | Reconectar credential en Settings → Credentials → Notion Marli |
 | Stripe webhook 400 "invalid signature" | `rawBody=true` desactivado en webhook node | Editar webhook node → Options → activar `Raw Body` |
-| Email no entrega (status 200 pero llega a spam) | SPF/DKIM/DMARC no configurados | Ver runbook 04-setup-cloudflare-email.md |
+| Email no entrega (status 200 pero llega a spam) | SPF/DKIM/DMARC no configurados | Ver runbook 04-setup-resend.md |
 | Claude API 429 (rate limit) | Sin `cache_control` en system prompt | Verificar que el system block tiene `cache_control: ephemeral` |
 | Polling Sesiones cada 15min consume mucho | Volumen alto | Migrar a Notion webhook (requiere Enterprise) |
 

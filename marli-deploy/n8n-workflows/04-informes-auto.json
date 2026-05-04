@@ -21,21 +21,24 @@
         "resource": "databasePage",
         "operation": "getAll",
         "databaseId": "={{ $env.NOTION_DB_SESIONES_ID }}",
-        "returnAll": true,
+        "returnAll": false,
+        "limit": 10,
         "filterType": "manual",
-        "matchType": "anyFilter",
+        "matchType": "allFilters",
         "filters": {
           "conditions": [
-            { "key": "Status|select", "condition": "equals", "selectValue": "cerrada" }
+            { "key": "Status|select", "condition": "equals", "selectValue": "cerrada" },
+            { "key": "Resumen IA|rich_text", "condition": "isEmpty" }
           ]
         }
       },
       "id": "find-cerradas",
-      "name": "Notion · Sesiones cerradas",
+      "name": "Notion · Sesiones cerradas sin informe",
       "type": "n8n-nodes-base.notion",
       "typeVersion": 2,
       "position": [460, 300],
-      "credentials": { "notionApi": { "id": "notion-cliente", "name": "Notion Cliente Psicólogo" } }
+      "credentials": { "notionApi": { "id": "notion-cliente", "name": "Notion Cliente Psicólogo" } },
+      "_doc": "Fix S1.6: filtra sesiones que aún NO tienen Resumen IA. Sin esto, el cron pillaba TODAS las sesiones cerradas cada 15min y refacturaba Claude API en bucle. Limit=10 para no agotar rate limit Anthropic en primer run sobre histórico."
     },
     {
       "parameters": {
@@ -103,29 +106,29 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.mailchannels.net/tx/v1/send",
+        "url": "https://api.resend.com/emails",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             { "name": "Content-Type", "value": "application/json" },
-            { "name": "Authorization", "value": "Bearer {{ $env.CLOUDFLARE_EMAIL_API_KEY }}" }
+            { "name": "Authorization", "value": "Bearer {{ $env.RESEND_API_KEY }}" }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"personalizations\": [{ \"to\": [{ \"email\": \"{{ $env.CLIENTE_PSICOLOGO_EMAIL }}\" }] }],\n  \"from\": { \"email\": \"informes@marli.agency\", \"name\": \"Marli\" },\n  \"subject\": \"Borrador de informe listo para revisar\",\n  \"content\": [\n    { \"type\": \"text/html\", \"value\": \"<p>Hay un borrador de informe esperando tu revisión en el CRM. Cuando lo hayas leído y editado si hace falta, marca el toggle <strong>Informe Aprobado</strong> y se generará el PDF automáticamente.</p>\" }\n  ]\n}",
+        "jsonBody": "={\n  \"from\": \"Marli <hola@marli.agency>\",\n  \"to\": [\"{{ $env.CLIENTE_PSICOLOGO_EMAIL }}\"],\n  \"subject\": \"Borrador de informe listo para revisar\",\n  \"html\": \"<p>Hay un borrador de informe esperando tu revisión en el CRM. Cuando lo hayas leído y editado si hace falta, marca el toggle <strong>Informe Aprobado</strong> y se generará el PDF automáticamente.</p>\",\n  \"tags\": [{ \"name\": \"workflow\", \"value\": \"04-informes\" }, { \"name\": \"event\", \"value\": \"borrador-listo\" }]\n}",
         "options": {}
       },
       "id": "notify-psicologo",
-      "name": "Email · Avisar psicólogo",
+      "name": "Resend · Avisar psicólogo",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1560, 300]
     }
   ],
   "connections": {
-    "Cron · Cada 15 min": { "main": [[{ "node": "Notion · Sesiones cerradas", "type": "main", "index": 0 }]] },
-    "Notion · Sesiones cerradas": { "main": [[{ "node": "Extraer datos sesión", "type": "main", "index": 0 }]] },
+    "Cron · Cada 15 min": { "main": [[{ "node": "Notion · Sesiones cerradas sin informe", "type": "main", "index": 0 }]] },
+    "Notion · Sesiones cerradas sin informe": { "main": [[{ "node": "Extraer datos sesión", "type": "main", "index": 0 }]] },
     "Extraer datos sesión": { "main": [[{ "node": "Claude · Redactar borrador", "type": "main", "index": 0 }]] },
     "Claude · Redactar borrador": { "main": [[{ "node": "Parsear borrador", "type": "main", "index": 0 }]] },
     "Parsear borrador": { "main": [[{ "node": "Notion · Escribir Resumen IA", "type": "main", "index": 0 }]] },
@@ -137,7 +140,7 @@
   "_meta": {
     "marli_workflow_id": "04-informes-auto",
     "trigger": "Cron 15min · poll DB Sesiones por status='cerrada'",
-    "depends_on": ["NOTION_DB_SESIONES_ID", "ANTHROPIC_API_KEY_INFORMES (key separada de chatbot para rate-limits independientes)", "CLIENTE_PSICOLOGO_EMAIL", "CLOUDFLARE_EMAIL_API_KEY"],
+    "depends_on": ["NOTION_DB_SESIONES_ID", "ANTHROPIC_API_KEY_INFORMES (key separada de chatbot para rate-limits independientes)", "CLIENTE_PSICOLOGO_EMAIL", "RESEND_API_KEY"],
     "fase": 1,
     "criticidad": "S2",
     "compliance_critical": "El borrador IA NUNCA se envía al paciente directamente. SIEMPRE pasa por aprobación del psicólogo (toggle 'Informe Aprobado').",
